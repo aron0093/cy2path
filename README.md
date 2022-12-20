@@ -2,7 +2,7 @@
 
 <img align="left" 
      src="https://user-images.githubusercontent.com/25486108/208702939-0f2e9339-0d1f-467a-934c-56d5db388f22.gif"
-     width="400" height="380">
+     width="400" height="320">
 
 We begin with a transition probability matrix of cell states. Assuming Markovian dynamics,
 
