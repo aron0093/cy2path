@@ -3,11 +3,10 @@ import torch
 #torch.set_default_dtype(torch.float64)
 from ..utils import log_domain_matmul, log_domain_mean
 
-class IFHMM(torch.nn.Module):
+class SSM(torch.nn.Module):
     
     ''' 
-    Independent chain Factorial hidden Markov model 
-    with a common hidden state space trained on 
+    Switch state hidden Markov model trained on 
     a Markov state simulation of an observed state TPM
     with SGD.
     
@@ -24,7 +23,7 @@ class IFHMM(torch.nn.Module):
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
-    P(node/iter) = P(node/state, chain, iter)P(state/chain, iter)P(chain/iter)
+    P(node/iter) = P(node/state, chain, iter)P(chain/state, iter)P(state/iter)
     P(state/iter) is parametarised as a HMM i.e. P(state_current/state_previous)
 
     '''
@@ -40,23 +39,19 @@ class IFHMM(torch.nn.Module):
         self.use_gpu = use_gpu
         
         # Initial probability of being in any given hidden state
-        self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_chains,
-                                                                      self.num_states,
-                                                                      ))
+        self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states))
 
         # Intialise the weights of each node towards each chain
-        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_iters,
-                                                                         self.num_chains))
+        # Removed dependency on iter
+        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_states,
+                                                                         self.num_chains,
+                                                                            
+                                                                        ))
 
-        # Initialise emission matrix of states w.r.t. chains
+        # Initialise emission matrix -> common for either chain
         self.unnormalized_emission_matrix = torch.nn.Parameter(torch.randn(self.num_states,
                                                                            self.num_nodes
                                                                           ))
-        self.emissions_mask = torch.ones(self.num_states,
-                                         self.num_nodes
-                                        )
-        if emissions_mask is not None:
-            self.emissions_mask = torch.Tensor(emissions_mask)
                 
         # Initialise transition probability matrix between hidden states
         self.unnormalized_transition_matrix = torch.nn.Parameter(torch.randn(self.num_states,
@@ -72,7 +67,7 @@ class IFHMM(torch.nn.Module):
     def forward_model(self):
     
         # Normalise across states 
-        log_state_init = torch.nn.functional.log_softmax(self.unnormalized_state_init, dim=1)
+        log_state_init = torch.nn.functional.log_softmax(self.unnormalized_state_init, dim=0)
 
         # Normalise chain weights
         log_chain_weights = torch.nn.functional.log_softmax(self.unnormalized_chain_weights, dim=1)
@@ -84,7 +79,7 @@ class IFHMM(torch.nn.Module):
         log_transition_matrix = torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1)
 
         # MSM iteration wise probability calculation
-        log_hidden_state_probs = torch.zeros(self.num_iters, self.num_chains, self.num_states)
+        log_hidden_state_probs = torch.zeros(self.num_iters, self.num_states)
         log_observed_state_probs_ = torch.zeros(self.num_iters, self.num_chains, self.num_nodes)
 
         if self.is_cuda: 
@@ -93,14 +88,13 @@ class IFHMM(torch.nn.Module):
 
         # Initialise at iteration 0
         log_hidden_state_probs[0] = log_state_init
-        log_observed_state_probs_[0] = log_domain_matmul(log_hidden_state_probs[0], log_emission_matrix)
+        log_observed_state_probs_[0] = log_domain_matmul(log_hidden_state_probs[[0]], log_chain_weights).unsqueeze(-1) + log_emission_matrix.sum(0).repeat(2,1).unsqueeze(0)
         
         for t in range(1, self.num_iters):
-            log_hidden_state_probs[t] = log_domain_matmul(log_hidden_state_probs[t-1], log_transition_matrix)                                   
-            log_observed_state_probs_[t] = log_domain_matmul(log_hidden_state_probs[t], log_emission_matrix)
+            log_hidden_state_probs[t] = log_domain_matmul(log_hidden_state_probs[[t-1]], log_transition_matrix)                                   
+            log_observed_state_probs_[t] = log_domain_matmul(log_hidden_state_probs[[t]], log_chain_weights).unsqueeze(-1) + log_emission_matrix.sum(0).repeat(2,1).unsqueeze(0)
 
-        log_observed_state_probs = log_observed_state_probs_ + log_chain_weights.unsqueeze(-1)
-        log_observed_state_probs = log_observed_state_probs.logsumexp(1)
+        log_observed_state_probs = log_observed_state_probs_.logsumexp(1)
 
         return log_observed_state_probs, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights
 
@@ -136,7 +130,7 @@ class IFHMM(torch.nn.Module):
         
         try: assert self.loss_values
         except: self.loss_values = []
-        
+
         try: assert self.penality_values
         except: self.penality_values = []
         
@@ -166,13 +160,6 @@ class IFHMM(torch.nn.Module):
                 loss = loss_ + penalty
                 self.penality_values.append(penalty.item())
 
-                #for s in range(self.num_states): 
-                #    emission = torch.transpose(torch.exp(self.forward_model()[-1]), 1,0) 
-
-                    #first_term = torch.einsum('ij,ik->ijk', TPM, emission)
-                    #second_term = torch.einsum('ij,jk->ijk', torch.transpose(TPM,1,0), emission)
-                    
-                #    loss += torch.absolute(first_term - second_term).sum()
             else:
                 loss = self.criterion(prediction, D)
             loss.backward()
@@ -181,6 +168,7 @@ class IFHMM(torch.nn.Module):
                 swa_scheduler.step()
             
             self.loss_values.append(loss.item())
+
 
             self.elapsed_epochs += 1
             if epoch % 10 == 0 or epoch <=10:
@@ -202,6 +190,5 @@ class IFHMM(torch.nn.Module):
                                                                                 self.elapsed_epochs, 
                                                                                 loss.item(),
                                                                                 avg_corrcoeff))
-                
                 
             
