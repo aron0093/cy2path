@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-  name='switchstate',
+  name='cy2path',
   version='0.0.1',
   description='State probability simulations based trajectory inference.',
   license='BSD 3-Clause License',
