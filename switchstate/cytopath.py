@@ -74,8 +74,6 @@ def infer_cytopath_lineages(data, matrix_key='T_forward', groupby='louvain', rec
     num_chains = adata.uns['markov_chain_sampling']['sampling_params']['num_chains']
     markov_chains = adata.uns['markov_chain_sampling']['state_indices']
 
-    
-
     # Computer pairwise distances
     # TODO: precompute pairwise distances between cells and use those when calculating Hausdorff distance
     # Some other metric/measure e.g. Fretchet
