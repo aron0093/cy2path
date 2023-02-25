@@ -75,13 +75,13 @@ def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=True, self_
     if recalc_matrix:
         logging.info('recalc_matrix=True, both TPM and root/end states will be recalculated.')
         adata.uns[matrix_key] = get_transition_matrix(adata, self_transitions=self_transitions)
-        terminal_states(adata, self_transitions=self_transitions)
+        terminal_states(adata, self_transitions=self_transitions, random_state=None)
     else:
         try: 
             assert adata.uns[matrix_key].shape
         except: 
             adata.uns[matrix_key] = get_transition_matrix(adata, self_transitions=self_transitions)
-            terminal_states(adata, self_transitions=self_transitions)
+            terminal_states(adata, self_transitions=self_transitions, random_state=None)
             logging.warning('Transition probability matrix was not present and was calculated.')
 
         if not issparse(adata.uns[matrix_key]):
@@ -92,7 +92,7 @@ def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=True, self_
         assert 'root_cells' in adata.obs.columns
         assert 'end_points' in adata.obs.columns
     except: 
-        terminal_states(adata, self_transitions=self_transitions)
+        terminal_states(adata, self_transitions=self_transitions, random_state=None)
         logging.warning('Root states were not present and were calculated.')
 
     # Initialise using root_cells, uniform or custom
