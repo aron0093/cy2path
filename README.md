@@ -1,10 +1,10 @@
 ### Factorial HMM supervised with Markov chain simulations for lineage inference with single cell RNA seq. data.
 
-<img align="left" 
-     src="https://user-images.githubusercontent.com/25486108/208702939-0f2e9339-0d1f-467a-934c-56d5db388f22.gif"
-     width="450" height="380">
-
-We begin with a transition probability matrix of cell states. Assuming Markovian dynamics,
+<table border="0">
+<tr >
+<td><img align="left" src="https://user-images.githubusercontent.com/25486108/208702939-0f2e9339-0d1f-467a-934c-56d5db388f22.gif" width="4500" height="380"></td>
+ 
+ <td>We begin with a transition probability matrix of cell states. Assuming Markovian dynamics,
 
 <p align=center> $P(cell|t) = P(cell|cell_{t-1})$ </p>
 
@@ -19,4 +19,6 @@ The animation overlays $P(t|cell,init)$ on a 2D UMAP embedding of the data ([Cer
 Assuming Markovian dynamics in a common latent space,
 
 <p align=center> $P(cell|t) = \sum_l \sum_s P(cell|s_{t}) P(l|s_{t}) P(s_{t}|s_{t-1})$ </p>
-
+</td>
+</tr>
+</table>
