@@ -44,7 +44,7 @@ class IFHMM(torch.nn.Module):
                                                                       self.num_states,
                                                                       ))
 
-        # Intialise the weights of each node towards each chain
+        # Intialise the chain weights
         self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_iters,
                                                                          self.num_chains))
 
@@ -100,9 +100,9 @@ class IFHMM(torch.nn.Module):
             log_observed_state_probs_[t] = log_domain_matmul(log_hidden_state_probs[t], log_emission_matrix)
 
         log_observed_state_probs = log_observed_state_probs_ + log_chain_weights.unsqueeze(-1)
-        log_observed_state_probs = log_observed_state_probs.logsumexp(1)
+        log_observed_state_probs = log_observed_state_probs.logsumexp(1) #- torch.log(torch.Tensor([self.num_chains]))
 
-        return log_observed_state_probs, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights
+        return log_observed_state_probs, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix
 
     def train(self, D, TPM=None, num_epochs=1000, optimizer=None, criterion=None, swa_scheduler=None, swa_start=200):
         
@@ -136,9 +136,12 @@ class IFHMM(torch.nn.Module):
         
         try: assert self.loss_values
         except: self.loss_values = []
-        
+
         try: assert self.penality_values
         except: self.penality_values = []
+
+        try: assert self.sparsity_values
+        except: self.sparsity_values = []
         
         self.optimizer = optimizer
         if self.optimizer is None:
@@ -155,26 +158,27 @@ class IFHMM(torch.nn.Module):
             prediction, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights = self.forward_model()
 
             if TPM is not None:
-                loss_ = self.criterion(prediction, D)  
+                loss_ = self.criterion(prediction, D) 
 
                 self.penalty_criterion = torch.nn.KLDivLoss(reduction='batchmean', log_target=True)
 
                 log_state_emission_matrix = torch.transpose(log_emission_matrix, 1,0)
                 log_transition_emission_matrix = log_domain_matmul(TPM.log(), log_state_emission_matrix.detach())
-                penalty = 10*self.penalty_criterion(log_transition_emission_matrix, log_state_emission_matrix)
+                penalty = 1000*self.penalty_criterion(log_transition_emission_matrix, log_state_emission_matrix)
 
                 loss = loss_ + penalty
                 self.penality_values.append(penalty.item())
 
-                #for s in range(self.num_states): 
-                #    emission = torch.transpose(torch.exp(self.forward_model()[-1]), 1,0) 
-
-                    #first_term = torch.einsum('ij,ik->ijk', TPM, emission)
-                    #second_term = torch.einsum('ij,jk->ijk', torch.transpose(TPM,1,0), emission)
-                    
-                #    loss += torch.absolute(first_term - second_term).sum()
             else:
-                loss = self.criterion(prediction, D)
+                loss = self.criterion(prediction, D) + self.criterion(torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1),
+                                                                      torch.eye(self.num_states))
+
+            
+            sparsity = self.criterion(torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1),
+                                                                      torch.eye(self.num_states))
+            loss += sparsity
+            self.sparsity_values.append(sparsity.item())
+
             loss.backward()
             self.optimizer.step()
             if self.elapsed_epochs > swa_start and self.swa_scheduler is not None:
@@ -192,16 +196,15 @@ class IFHMM(torch.nn.Module):
 
                 # Print Loss
                 if TPM is not None:
-                    print('Time: {:.2f}s. Iteration: {}. Loss: {}. Penalty: {}. Corrcoeff: {}.'.format(time.time() - start_time,
+                    print('Time: {:.2f}s. Iteration: {:.2E}. Loss: {:.2E}. Sparsity: {:.2E}. Penalty: {:.2E}. Corrcoeff: {:.2E}.'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 loss.item(), 
+                                                                                sparsity.item(),
                                                                                 penalty.item(),
                                                                                 avg_corrcoeff))
                 else:
-                    print('Time: {:.2f}s. Iteration: {}. Loss: {}. Corrcoeff: {}.'.format(time.time() - start_time,
+                    print('Time: {:.2f}s. Iteration: {:.2E}. Loss: {:.2E}. Sparsity: {:.2E}. Corrcoeff: {:.2E}.'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 loss.item(),
+                                                                                sparsity.item(),
                                                                                 avg_corrcoeff))
-                
-                
-            

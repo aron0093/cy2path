@@ -80,7 +80,7 @@ class SSM(torch.nn.Module):
 
         # MSM iteration wise probability calculation
         log_hidden_state_probs = torch.zeros(self.num_iters, self.num_states)
-        log_observed_state_probs_ = torch.zeros(self.num_iters, self.num_chains, self.num_nodes)
+        log_observed_state_probs_ = torch.zeros(self.num_iters, self.num_states, self.num_chains, self.num_nodes)
 
         if self.is_cuda: 
             log_hidden_state_probs = log_hidden_state_probs.cuda()
@@ -88,13 +88,17 @@ class SSM(torch.nn.Module):
 
         # Initialise at iteration 0
         log_hidden_state_probs[0] = log_state_init
-        log_observed_state_probs_[0] = log_domain_matmul(log_hidden_state_probs[[0]], log_chain_weights).unsqueeze(-1) + log_emission_matrix.sum(0).repeat(2,1).unsqueeze(0)
+        log_observed_state_probs_[0] = (torch.permute(log_emission_matrix.repeat(2,1,1), (1,0,-1)) + \
+                                                      log_chain_weights.unsqueeze(-1)) + \
+                                                      log_hidden_state_probs[[0]].transpose(1,0).unsqueeze(-1)
         
         for t in range(1, self.num_iters):
             log_hidden_state_probs[t] = log_domain_matmul(log_hidden_state_probs[[t-1]], log_transition_matrix)                                   
-            log_observed_state_probs_[t] = log_domain_matmul(log_hidden_state_probs[[t]], log_chain_weights).unsqueeze(-1) + log_emission_matrix.sum(0).repeat(2,1).unsqueeze(0)
+            log_observed_state_probs_[t] = (torch.permute(log_emission_matrix.repeat(2,1,1), (1,0,-1)) + \
+                                                      log_chain_weights.unsqueeze(-1)) + \
+                                                      log_hidden_state_probs[[t]].transpose(1,0).unsqueeze(-1)
 
-        log_observed_state_probs = log_observed_state_probs_.logsumexp(1)
+        log_observed_state_probs = log_observed_state_probs_.logsumexp(1).logsumexp(1)
 
         return log_observed_state_probs, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights
 
@@ -133,6 +137,9 @@ class SSM(torch.nn.Module):
 
         try: assert self.penality_values
         except: self.penality_values = []
+
+        try: assert self.sparsity_values
+        except: self.sparsity_values = []
         
         self.optimizer = optimizer
         if self.optimizer is None:
@@ -149,26 +156,33 @@ class SSM(torch.nn.Module):
             prediction, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights = self.forward_model()
 
             if TPM is not None:
-                loss_ = self.criterion(prediction, D)  
+                loss_ = self.criterion(prediction, D) 
 
                 self.penalty_criterion = torch.nn.KLDivLoss(reduction='batchmean', log_target=True)
 
                 log_state_emission_matrix = torch.transpose(log_emission_matrix, 1,0)
                 log_transition_emission_matrix = log_domain_matmul(TPM.log(), log_state_emission_matrix.detach())
-                penalty = 10*self.penalty_criterion(log_transition_emission_matrix, log_state_emission_matrix)
+                penalty = 1000*self.penalty_criterion(log_transition_emission_matrix, log_state_emission_matrix)
 
                 loss = loss_ + penalty
                 self.penality_values.append(penalty.item())
 
             else:
-                loss = self.criterion(prediction, D)
+                loss = self.criterion(prediction, D) + self.criterion(torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1),
+                                                                      torch.eye(self.num_states))
+
+            
+            sparsity = self.criterion(torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1),
+                                                                      torch.eye(self.num_states))
+            loss += sparsity
+            self.sparsity_values.append(sparsity.item())
+
             loss.backward()
             self.optimizer.step()
             if self.elapsed_epochs > swa_start and self.swa_scheduler is not None:
                 swa_scheduler.step()
             
             self.loss_values.append(loss.item())
-
 
             self.elapsed_epochs += 1
             if epoch % 10 == 0 or epoch <=10:
@@ -180,15 +194,17 @@ class SSM(torch.nn.Module):
 
                 # Print Loss
                 if TPM is not None:
-                    print('Time: {:.2f}s. Iteration: {}. Loss: {}. Penalty: {}. Corrcoeff: {}.'.format(time.time() - start_time,
+                    print('Time: {:.2f}s. Iteration: {:.2E}. Loss: {:.2E}. Sparsity: {:.2E}. Penalty: {:.2E}. Corrcoeff: {:.2E}.'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 loss.item(), 
+                                                                                sparsity.item(),
                                                                                 penalty.item(),
                                                                                 avg_corrcoeff))
                 else:
-                    print('Time: {:.2f}s. Iteration: {}. Loss: {}. Corrcoeff: {}.'.format(time.time() - start_time,
+                    print('Time: {:.2f}s. Iteration: {:.2E}. Loss: {:.2E}. Sparsity: {:.2E}. Corrcoeff: {:.2E}.'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 loss.item(),
+                                                                                sparsity.item(),
                                                                                 avg_corrcoeff))
                 
             
