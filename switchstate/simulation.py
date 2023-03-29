@@ -116,6 +116,7 @@ def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=True, self_
     else:
         stationary_state_probability = (adata.obs['end_points']/adata.obs['end_points'].sum()).values
         logging.warning('Multiple eigenvalues > 1, falling back to end_points to infer stationary distribution.') 
+    stationary_state_probability = stationary_state_probability.flatten()
 
     # Create empty arrays for the simulation and sample random numbers for all samples and max steps
     state_transition_probabilities = np.empty((num_chains, max_iter-1), dtype=np.float32)
