@@ -199,9 +199,9 @@ def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=True, self_
     if convergence in adata.obs.columns:
         adata.uns['markov_chain_sampling']['stationary_state_by_cluster'] = stationary_state_by_cluster.values
         adata.uns['markov_chain_sampling']['cluster_sequences'] = cluster_sequences[:, :convergence_check]
-        adata.uns['markov_chain_sampling']['cluster_proportions'] = cluster_proportions.loc[:, :convergence_check]
+        adata.uns['markov_chain_sampling']['cluster_proportions'] = cluster_proportions.values[:, :convergence_check].T
         adata.uns['markov_chain_sampling']['cluster_sequences_max_iter'] = cluster_sequences
-        adata.uns['markov_chain_sampling']['cluster_proportions_max_iter'] = cluster_proportions
+        adata.uns['markov_chain_sampling']['cluster_proportions_max_iter'] = cluster_proportions.values.T
     if copy: return adata
 
 
