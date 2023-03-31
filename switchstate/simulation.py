@@ -2,6 +2,7 @@ import logging
 logging.basicConfig(level = logging.INFO)
 import collections
 import numpy as np
+import pandas as pd
 
 from scvelo.utils import get_transition_matrix
 from scvelo.tools import terminal_states
@@ -11,6 +12,7 @@ from scipy.spatial.distance import cosine
 from scipy.sparse import issparse, csr_matrix
 
 from .sampling import iterate_state_probability
+from .sampling import check_convergence_criteria
 
 from tqdm.auto import tqdm
 from joblib import Parallel, delayed
@@ -151,6 +153,28 @@ def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=True, self_
                                               max_iter=max_iter, tol=tol)[-1]
     elif isinstance(convergence, int):
         convergence_check=convergence
+    # Convergence of cluster proportions to stationary state
+    elif convergence in adata.obs.columns:
+        if not pd.api.types.is_categorical_dtype(adata.obs[convergence]):
+            logging.warning(f'{convergence} in adata.obs should be categorical.')
+        stationary_state_by_cluster = pd.DataFrame({'cluster': adata.obs[convergence].astype('category'),
+                                                    'probability': stationary_state_probability})\
+            .groupby('cluster').sum()
+        cluster_sequences = adata.obs[convergence].astype(str).values[state_indices]
+        # calculate cluster proportions for each step
+        cluster_proportions = pd.DataFrame(data=np.zeros((len(stationary_state_by_cluster), max_iter),
+                                                         dtype=np.float),
+                                           index=stationary_state_by_cluster.index)
+        for cat in stationary_state_by_cluster.index:
+            cluster_proportions.loc[cat, :] = (cluster_sequences == cat).mean(axis=0)
+        eps_history = cluster_proportions.apply(lambda x: cosine(x.values.flatten(),
+                                                                 stationary_state_by_cluster.values.flatten())).values
+        convergence_check = check_convergence_criteria(eps_history, tol)
+        if isinstance(convergence_check, int) and convergence_check < max_iter:
+            logging.info('Tolerance reached after {} iterations of {}.'.format(convergence_check, max_iter))
+        else:
+            logging.warning('Max number ({}) of iterations reached.'.format(max_iter))
+            convergence_check = max_iter
 
     state_indices_converged = state_indices[:, :convergence_check]
     state_history_converged = state_history_max_iter[:convergence_check]
@@ -163,14 +187,21 @@ def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=True, self_
     adata.uns['markov_chain_sampling']['state_transition_probabilities_max_iter'] = state_transition_probabilities
     adata.uns['markov_chain_sampling']['init_state_probability'] = init_state_probability
     adata.uns['markov_chain_sampling']['stationary_state_probability'] = stationary_state_probability
-    adata.uns['markov_chain_sampling']['sampling_params'] = {'recalc_matrix': recalc_matrix, 
-                                                         'self_transitions': self_transitions, 
-                                                         'init_type': init_type, 
-                                                         'max_iter': max_iter,
-                                                         'num_chains': num_chains,
-                                                         'convergence': convergence_check,
-                                                         'tol': tol, 
-                                                         'copy': copy}
+    adata.uns['markov_chain_sampling']['sampling_params'] = {'recalc_matrix': recalc_matrix,
+                                                             'self_transitions': self_transitions,
+                                                             'init_type': init_type,
+                                                             'max_iter': max_iter,
+                                                             'num_chains': num_chains,
+                                                             'convergence': convergence_check,
+                                                             'convergence_criterion': convergence,
+                                                             'tol': tol,
+                                                             'copy': copy}
+    if convergence in adata.obs.columns:
+        adata.uns['markov_chain_sampling']['stationary_state_by_cluster'] = stationary_state_by_cluster.values
+        adata.uns['markov_chain_sampling']['cluster_sequences'] = cluster_sequences[:, :convergence_check]
+        adata.uns['markov_chain_sampling']['cluster_proportions'] = cluster_proportions.values[:, :convergence_check].T
+        adata.uns['markov_chain_sampling']['cluster_sequences_max_iter'] = cluster_sequences
+        adata.uns['markov_chain_sampling']['cluster_proportions_max_iter'] = cluster_proportions.values.T
     if copy: return adata
 
 

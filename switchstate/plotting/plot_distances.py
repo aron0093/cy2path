@@ -6,10 +6,13 @@ from scipy.spatial.distance import cosine, euclidean
 def plot_distances(adata, key='state_history_max_iter', mode='sampling', metric='cosine', log=False, dpi=100, figsize=(18,5), save=None):
        
     # Check if state history exists
+    stationary_state_key = 'stationary_state_probability'
     if mode=='sampling':
         upper_key = 'state_probability_sampling'
     elif mode=='simulation':
         upper_key = 'markov_chain_sampling'
+        if adata.uns[upper_key]['sampling_params']['convergence_criterion'] in adata.obs.columns:
+            stationary_state_key = 'stationary_state_by_cluster'
 
     try: data_history = adata.uns[upper_key][key]
     except: raise ValueError('{} could not be recovered. Run corresponding function first'.format(key.capitalize().replace('_', ' ')))
@@ -19,11 +22,11 @@ def plot_distances(adata, key='state_history_max_iter', mode='sampling', metric=
         if metric=='cosine':
             distance_to_next.append(cosine(data_history[i-1], data_history[i]))
             distance_to_stationary.append(cosine(data_history[i],
-                                                adata.uns[upper_key]['stationary_state_probability']))
+                                                 adata.uns[upper_key][stationary_state_key]))
         elif metric=='euclidean':
             distance_to_next.append(euclidean(data_history[i-1], data_history[i]))
             distance_to_stationary.append(euclidean(data_history[i],
-                                                adata.uns[upper_key]['stationary_state_probability']))
+                                                    adata.uns[upper_key][stationary_state_key]))
 
     distance_to_stationary_iterative = [abs(distance_to_stationary[i + 1] - distance_to_stationary[i]) for i in range(len(distance_to_stationary)-1)]
           
