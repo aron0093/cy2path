@@ -17,8 +17,8 @@ setup(
   classifiers=[
     'Development Status :: 3 - Alpha',
     'Intended Audience :: Science/Research',
-    'Topic :: Software Development :: Build Tools',
-    'License :: OSI Approved :: BSD License',
+    'Topic :: Scientific/Engineering :: Bio-Informatics',
+    'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
     'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
   ])
