@@ -1,4 +1,4 @@
-### Factorial HMM supervised with Markov chain simulations for lineage inference with single cell RNA seq. data.
+### Factorial CRF models trained on Markovian simulations of biological processes using scRNAseq. data.
 
 <table border="0">
 <tr >
