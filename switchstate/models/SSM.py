@@ -1,5 +1,6 @@
 import time
 import torch
+from tqdm.auto import tqdm
 from ..utils import log_domain_mean, JSDLoss, revgrad
 
 class SSM(torch.nn.Module):
@@ -20,8 +21,6 @@ class SSM(torch.nn.Module):
         Number of observed states in the MSM simulation.
     num_iters : int
         Number of iterations of the MSM simulation.
-    sparsity_weight : float (default: 1.0)
-        Regularisation weight for sparse latent TPM.
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
@@ -30,15 +29,13 @@ class SSM(torch.nn.Module):
 
     '''
     
-    def __init__(self, num_states, num_chains, num_nodes, num_iters, 
-                sparsity_weight = 1.0, use_gpu=False):
+    def __init__(self, num_states, num_chains, num_nodes, num_iters, use_gpu=False):
 
         super().__init__()
         self.num_nodes = num_nodes
         self.num_chains = num_chains
         self.num_states = num_states
         self.num_iters = num_iters
-        self.sparsity_weight = sparsity_weight
         self.use_gpu = use_gpu
         
         # Initial probability of being in any given hidden state
@@ -104,7 +101,8 @@ class SSM(torch.nn.Module):
 
         return log_observed_state_probs, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights
 
-    def train(self, D, TPM=None, num_epochs=300, optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
+    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
+              optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
         
         '''
         Train the model.
@@ -117,6 +115,8 @@ class SSM(torch.nn.Module):
             Used to regularise emission probabilities.
         num_epochs : int (default: 1000)
             Number of training epochs
+        sparsity_weight : float (default: 1.0)
+            Regularisation weight for sparse latent TPM.
         optimizer : (default: Adam(lr=0.1))
             Optimizer algorithm.
         criterion : (default: KLDivLoss())
@@ -132,6 +132,8 @@ class SSM(torch.nn.Module):
 
         if self.is_cuda:
             D = D.cuda()
+        
+        self.sparsity_weight = sparsity_weight
          
         try: assert self.elapsed_epochs
         except: self.elapsed_epochs = 0
@@ -160,7 +162,7 @@ class SSM(torch.nn.Module):
             self.criterion = torch.nn.KLDivLoss(reduction='batchmean', log_target=False)
                 
         start_time = time.time()           
-        for epoch in range(num_epochs):
+        for epoch in tqdm(range(num_epochs), desc='Training dynamic model'):
 
             self.optimizer.zero_grad()
             prediction, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights = self.forward_model()
@@ -183,7 +185,7 @@ class SSM(torch.nn.Module):
             self.independence_values.append(independence.item())
 
             if TPM is not None:
-                regularisation =  self.criterion(torch.nn.functional.log_softmax(self.unnormalized_emission_matrix, dim=-1),
+                regularisation = self.criterion(torch.nn.functional.log_softmax(self.unnormalized_emission_matrix, dim=-1),
                                                  torch.matmul(torch.exp(log_emission_matrix.detach()), TPM))
                 loss += regularisation
                 self.regularisation_values.append(regularisation)
