@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 def plot_fate(adata, key='fate_probabilities_macro', mode='sampling', basis='umap', color_map='viridis', ncols=3, dpi=100, figsize=(6,5), save=None):
 
     if mode=='sampling':
-        upper_key='state_probability_sampling'
+        upper_key='cell_fate'
     
     try: fate_probabilities = adata.uns[upper_key]['fate_probabilities_macro']
     except: raise ValueError('Fate probabilities were not found.')

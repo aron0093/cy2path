@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import collections
 from tqdm.auto import tqdm
 
-# Plot fate probability
+# Plot cytopath assignment probability
 def plot_lineages(adata, keys=None, basis='umap', color_map='viridis', ncols=3, dpi=100, figsize=(6,5), save=None):
 
     if keys is not None and isinstance(keys, (collections.Sequence, np.ndarray)):
@@ -28,8 +28,6 @@ def plot_lineages(adata, keys=None, basis='umap', color_map='viridis', ncols=3, 
         markov_chains_ = adata.uns['markov_chain_sampling']['state_indices'][markov_chain_indices]
 
         lineage_coordinates.append(adata.obsm['X_{}'.format(basis)][markov_chains_].mean(axis=0))
-        # Reweight with state sampling probabilities - with enough simulations this isn't neccessary
-        # adata.uns['state_probability_sampling']['state_history'][0][adata.uns['markov_chain_sampling']['state_indices']]
 
     if len(keys) > ncols:
         nrows=int(np.ceil(len(keys)/ncols))

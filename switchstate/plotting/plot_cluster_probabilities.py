@@ -2,7 +2,6 @@ import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 
-
 def plot_probability_by_clusters(adata, cluster_key: str, key='state_history', plot='heatmap',
                                  cmap='gist_heat_r', agg='sum', figsize=(7, 5),
                                  dpi=100, save=None, show=False, ax=None):

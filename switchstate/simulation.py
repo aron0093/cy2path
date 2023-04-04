@@ -4,15 +4,11 @@ import collections
 import numpy as np
 import pandas as pd
 
-from scvelo.utils import get_transition_matrix
-from scvelo.tools import terminal_states
-from scvelo.tools.terminal_states import eigs
-
 from scipy.spatial.distance import cosine
-from scipy.sparse import issparse, csr_matrix
+from scipy.sparse import csr_matrix
 
-from .sampling import iterate_state_probability
-from .sampling import check_convergence_criteria
+from .sampling import iterate_state_probability, check_convergence_criteria
+from .utils import check_TPM, check_root_init, estimate_stationary_state
 
 from tqdm.auto import tqdm
 from joblib import Parallel, delayed
@@ -20,18 +16,18 @@ from joblib import Parallel, delayed
 def extract_nonzero_entries(adata, matrix_key='T_forward'):
         
         # Extract non zero elements and create cumumlative distribution
-        trans_matrix_indices = np.split(adata.uns[matrix_key].indices, adata.uns[matrix_key].indptr)[1:-1]
-        trans_matrix_probabilites = np.split(adata.uns[matrix_key].data, adata.uns[matrix_key].indptr)[1:-1]
+        trans_matrix_indices = np.split(adata.obsp[matrix_key].indices, adata.obsp[matrix_key].indptr)[1:-1]
+        trans_matrix_probabilites = np.split(adata.obsp[matrix_key].data, adata.obsp[matrix_key].indptr)[1:-1]
         
         for i in range(len(trans_matrix_probabilites)):
             trans_matrix_probabilites[i]=np.cumsum(trans_matrix_probabilites[i])
         
         # For increased speed: Save data and indices of nonzero entries in np array--> 210% faster
         trans_matrix_indice_nonzeros = np.zeros((len(trans_matrix_probabilites), 
-                                            max(np.count_nonzero(adata.uns[matrix_key].toarray(), axis=1))), 
+                                            max(np.count_nonzero(adata.obsp[matrix_key].toarray(), axis=1))), 
                                             dtype=np.int32)
         trans_matrix_probabilites_nonzeros = np.zeros((len(trans_matrix_probabilites), 
-                                                    max(np.count_nonzero(adata.uns[matrix_key].toarray(), axis=1))), 
+                                                    max(np.count_nonzero(adata.obsp[matrix_key].toarray(), axis=1))), 
                                                     dtype=np.float32)
     
         for i in range(len(trans_matrix_probabilites)):
@@ -62,63 +58,23 @@ def iterate_markov_chain(adata, matrix_key='T_forward', max_iter=1000, init_stat
         state_indices_[k] = trans_matrix_indice_nonzeros[state_indices_[k-1], 
                                                     np.where(random_step[k-1] <= \
                                                     trans_matrix_probabilites_nonzeros[state_indices_[k-1], :])[0][0]]
-        state_transition_probabilities_[k-1] = adata.uns[matrix_key][state_indices_[k-1], state_indices_[k]]
+        state_transition_probabilities_[k-1] = adata.obsp[matrix_key][state_indices_[k-1], state_indices_[k]]
 
     return state_indices_, state_transition_probabilities_
 
-def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=True, self_transitions=False, 
+def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=False, self_transitions=False, 
                          init='root_cells', repeat_root=True, num_chains=1000, max_iter=1000, 
                          convergence='auto', tol=1e-5, n_jobs=-1, copy=False):
 
     # Run analysis using copy of anndata if specified otherwise inplace
     adata = data.copy() if copy else data
-
-    # Recalcualte TPM if specified
-    if recalc_matrix:
-        logging.info('recalc_matrix=True, both TPM and root/end states will be recalculated.')
-        adata.uns[matrix_key] = get_transition_matrix(adata, self_transitions=self_transitions)
-        terminal_states(adata, self_transitions=self_transitions, random_state=None)
-    else:
-        try: 
-            assert adata.uns[matrix_key].shape
-        except: 
-            adata.uns[matrix_key] = get_transition_matrix(adata, self_transitions=self_transitions)
-            terminal_states(adata, self_transitions=self_transitions, random_state=None)
-            logging.warning('Transition probability matrix was not present and was calculated.')
-
-        if not issparse(adata.uns[matrix_key]):
-            adata.uns[matrix_key] = csr_matrix(adata.uns[matrix_key])
-
-    # Recalculate root and terminal states if not present and TPM was not recalculated
-    try: 
-        assert 'root_cells' in adata.obs.columns
-        assert 'end_points' in adata.obs.columns
-    except: 
-        terminal_states(adata, self_transitions=self_transitions, random_state=None)
-        logging.warning('Root states were not present and were calculated.')
+    check_TPM(adata, matrix_key='T_forward', recalc_matrix=recalc_matrix, self_transitions=self_transitions)
 
     # Initialise using root_cells, uniform or custom
-    if isinstance(init, str):
-        if init=='root_cells':
-            init_state_probability = (adata.obs['root_cells']/adata.obs['root_cells'].sum()).values
-            init_type = init
-        elif init=='uniform':
-            init_state_probability = [1/adata.shape[0]]*adata.shape[0]  # uniform probability to start at each cell
-            init_type = 'uniform'
-    elif isinstance(init, (collections.Sequence, np.ndarray)):
-        init_state_probability=init
-        init_type = 'custom'
-    else:
-        raise ValueError('Incorrect initialisation of state probabilities.')
+    init_state_probability, init_type = check_root_init(adata, init=init)
    
     # Stationary state distribution
-    stationary_state_probability = eigs(adata.uns[matrix_key])[1]
-    if stationary_state_probability.shape[1] == 1:
-        stationary_state_probability /= stationary_state_probability.sum()
-    else:
-        stationary_state_probability = (adata.obs['end_points']/adata.obs['end_points'].sum()).values
-        logging.warning('Multiple eigenvalues > 1, falling back to end_points to infer stationary distribution.') 
-    stationary_state_probability = stationary_state_probability.flatten()
+    stationary_state_probability = estimate_stationary_state(adata, matrix_key='T_forward')
 
     # Create empty arrays for the simulation and sample random numbers for all samples and max steps
     state_transition_probabilities = np.empty((num_chains, max_iter-1), dtype=np.float32)
@@ -153,16 +109,16 @@ def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=True, self_
                                               max_iter=max_iter, tol=tol)[-1]
     elif isinstance(convergence, int):
         convergence_check=convergence
+
     # Convergence of cluster proportions to stationary state
     elif convergence in adata.obs.columns:
         if not pd.api.types.is_categorical_dtype(adata.obs[convergence]):
             logging.warning(f'{convergence} in adata.obs should be categorical.')
-        stationary_state_by_cluster = pd.DataFrame({'cluster': adata.obs[convergence].astype('category'),
-                                                    'probability': stationary_state_probability})\
-            .groupby('cluster').sum()
+        stationary_state_probability_by_cluster = pd.DataFrame({'cluster': adata.obs[convergence].astype('category'),
+                                                                'probability': stationary_state_probability}).groupby('cluster').sum()
         cluster_sequences = adata.obs[convergence].astype(str).values[state_indices]
         # calculate cluster proportions for each step
-        cluster_proportions = pd.DataFrame(data=np.zeros((len(stationary_state_by_cluster), max_iter),
+        cluster_proportions = pd.DataFrame(data=np.zeros((len(stationary_state_probability_by_cluster), max_iter),
                                                          dtype=np.float),
                                            index=stationary_state_by_cluster.index)
         for cat in stationary_state_by_cluster.index:

@@ -3,14 +3,12 @@ logging.basicConfig(level = logging.INFO)
 import collections
 import numpy as np
 
-from scvelo.utils import get_transition_matrix
-from scvelo.tools import terminal_states
-from scvelo.tools.terminal_states import eigs
-
 from scipy.spatial.distance import cosine
-from scipy.sparse import issparse, csr_matrix
+from scipy.sparse import csr_matrix
 
 from tqdm.auto import tqdm
+
+from .utils import check_TPM, check_root_init, estimate_stationary_state
 
 def check_convergence_criteria(eps_history, tol=1e-5):
     differences = [abs(eps_history[i+1]-eps_history[i]) for i in range(len(eps_history)-1)]
@@ -32,7 +30,7 @@ def iterate_state_probability(adata, matrix_key='T_forward', init=None, stationa
     for i in tqdm(range(max_iter), desc='Iterating state probability distributions'):
         
         state_history_max_iter[i] = current_state_probability
-        current_state_probability = csr_matrix.dot(current_state_probability, adata.uns[matrix_key])
+        current_state_probability = csr_matrix.dot(current_state_probability, adata.obsp[matrix_key])
         
         eps = cosine(current_state_probability, stationary)
         eps_history[i] = eps
@@ -49,58 +47,18 @@ def iterate_state_probability(adata, matrix_key='T_forward', init=None, stationa
     return state_history, state_history_max_iter, convergence_check
 
 # Evolve state probabilities 
-def sample_state_probability(data, matrix_key='T_forward', recalc_matrix=True, self_transitions=True, 
+def sample_state_probability(data, matrix_key='T_forward', recalc_matrix=False, self_transitions=False, 
                             init='root_cells', max_iter=1000, tol=1e-5, copy=False):
 
     # Run analysis using copy of anndata if specified otherwise inplace
     adata = data.copy() if copy else data
-
-    # Recalcualte TPM if specified
-    if recalc_matrix:
-        logging.info('recalc_matrix=True, both TPM and root/end states will be recalculated.')
-        adata.uns[matrix_key] = get_transition_matrix(adata, self_transitions=self_transitions)
-        terminal_states(adata, self_transitions=self_transitions, random_state=None)
-    else:
-        try: 
-            assert adata.uns[matrix_key].shape
-        except: 
-            adata.uns[matrix_key] = get_transition_matrix(adata, self_transitions=self_transitions)
-            terminal_states(adata, self_transitions=self_transitions, random_state=None)
-            logging.warning('Transition probability matrix was not present and was calculated.')
-
-        if not issparse(adata.uns[matrix_key]):
-            adata.uns[matrix_key] = csr_matrix(adata.uns[matrix_key])
-
-    # Recalculate root and terminal states if not present and TPM was not recalculated
-    try: 
-        assert 'root_cells' in adata.obs.columns
-        assert 'end_points' in adata.obs.columns
-    except: 
-        terminal_states(adata, self_transitions=self_transitions, random_state=None)
-        logging.warning('Root states were not present and were calculated.')
+    check_TPM(adata, matrix_key='T_forward', recalc_matrix=recalc_matrix, self_transitions=self_transitions)
 
     # Initialise using root_cells, uniform or custom
-    if isinstance(init, str):
-        if init=='root_cells':
-            init_state_probability = (adata.obs['root_cells']/adata.obs['root_cells'].sum()).values
-            init_type = init
-        elif init=='uniform':
-            init_state_probability = [1/adata.shape[0]]*adata.shape[0]  # uniform probability to start at each cell
-            init_type = 'uniform'
-    elif isinstance(init, (collections.Sequence, np.ndarray)):
-        init_state_probability=init
-        init_type = 'custom'
-    else:
-        raise ValueError('Incorrect initialisation of state probabilities.')
+    init_state_probability, init_type = check_root_init(adata, init=init)
    
     # Stationary state distribution
-    stationary_state_probability = eigs(adata.uns[matrix_key])[1]
-    if stationary_state_probability.shape[1] == 1:
-        stationary_state_probability /= stationary_state_probability.sum()
-    else:
-        stationary_state_probability = (adata.obs['end_points']/adata.obs['end_points'].sum()).values
-        logging.warning('Multiple eigenvalues > 1, falling back to end_points to infer stationary distribution.')
-    stationary_state_probability = stationary_state_probability.flatten()
+    stationary_state_probability = estimate_stationary_state(adata, matrix_key='T_forward')
 
     # Iterate state probabilities till convergence
     state_history, state_history_max_iter, convergence_check = iterate_state_probability(adata, matrix_key=matrix_key, 

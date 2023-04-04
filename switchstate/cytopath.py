@@ -10,7 +10,6 @@ from .pseudotime import infer_pseudotime
 from .simulation import sample_markov_chains
 
 from hausdorff import hausdorff_distance
-#import Fred as fred
 
 import networkit
 from networkit.community import ParallelLeiden, PLM
@@ -38,8 +37,8 @@ def get_graph(dm):
     return g
 
 def infer_cytopath_lineages(data, matrix_key='T_forward', groupby='louvain', recalc_items=False, recalc_matrix=False, self_transitions=False, 
-                  init='root_cells', repeat_root=True,  basis='pca', distance='euclidean', #pseudotime_key='pseudotime',
-                  resolution=1.0, num_chains=1000, max_iter=1000, tol=1e-5, n_jobs=-1, copy=False):
+                            init='root_cells', repeat_root=True,  basis='pca', distance='euclidean', #pseudotime_key='pseudotime',
+                            resolution=1.0, num_chains=1000, max_iter=1000, tol=1e-5, n_jobs=-1, copy=False):
 
     # Run analysis using copy of anndata if specified otherwise inplace
     adata = data.copy() if copy else data
@@ -63,9 +62,9 @@ def infer_cytopath_lineages(data, matrix_key='T_forward', groupby='louvain', rec
     # Check if sample_markov_chains() has been run
     if 'markov_chain_sampling' not in adata.uns.keys() or recalc_items:
         sample_markov_chains(data, matrix_key=matrix_key, recalc_matrix=False, self_transitions=False, 
-                         init=init, repeat_root=True, num_chains=num_chains, max_iter=max_iter, 
-                         convergence=adata.uns['state_probability_sampling']['sampling_params']['convergence'], 
-                         tol=tol, n_jobs=n_jobs, copy=False)
+                             init=init, repeat_root=True, num_chains=num_chains, max_iter=max_iter, 
+                             convergence=adata.uns['state_probability_sampling']['sampling_params']['convergence'], 
+                             tol=tol, n_jobs=n_jobs, copy=False)
 
     else:
         logging.info('Using precomputed Markov chains')
@@ -76,7 +75,7 @@ def infer_cytopath_lineages(data, matrix_key='T_forward', groupby='louvain', rec
 
     # Computer pairwise distances
     # TODO: precompute pairwise distances between cells and use those when calculating Hausdorff distance
-    # Some other metric/measure e.g. Fretchet
+    # Some other metric/measure e.g. Fretchet, DTW
     hausdorff_distances = np.zeros((num_chains, num_chains))
     
     # Cell state representation to be used for Hausdorff distance calculations
@@ -104,9 +103,6 @@ def infer_cytopath_lineages(data, matrix_key='T_forward', groupby='louvain', rec
             hausdorff_distances[i, j] = hausdorff_distance(cell_state_repr[markov_chains[i]],
                                                            cell_state_repr[markov_chains[j]],
                                                            distance=distance)
-            #frechet_distances[i, j] = fred.discrete_frechet(fred.Curve(cell_state_repr[markov_chains[i]]),
-            #                                                fred.Curve(cell_state_repr[markov_chains[j]]))
-
             hausdorff_distances[j, i] = hausdorff_distances[i, j]
 
     # Cluster simulations

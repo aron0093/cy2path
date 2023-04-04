@@ -12,7 +12,7 @@ def plot_distances(adata, key='state_history_max_iter', mode='sampling', metric=
     elif mode=='simulation':
         upper_key = 'markov_chain_sampling'
         if adata.uns[upper_key]['sampling_params']['convergence_criterion'] in adata.obs.columns:
-            stationary_state_key = 'stationary_state_by_cluster'
+            stationary_state_key = 'stationary_state_probability_by_cluster'
 
     try: data_history = adata.uns[upper_key][key]
     except: raise ValueError('{} could not be recovered. Run corresponding function first'.format(key.capitalize().replace('_', ' ')))

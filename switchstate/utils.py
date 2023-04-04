@@ -1,7 +1,17 @@
-import torch
 import os, contextlib
+
+import logging
+logging.basicConfig(level = logging.INFO)
+
+from scvelo.utils import get_transition_matrix
+from scvelo.tools import terminal_states
+from scvelo.tools.terminal_states import eigs
+
 import numpy as np
 from scipy.sparse import issparse, csr_matrix
+
+import torch
+from torch.autograd import Function
 
 # Scale array to range
 def scale(X, min=0, max=1):
@@ -28,40 +38,62 @@ def supress_stdout(func):
                 return func(*a, **ka)
     return wrapper
 
-def log_domain_matmul(log_A, log_B):
-    
-    '''
-    Normally, a matrix multiplication
-    computes out_{i,j} = sum_k A_{i,k} x B_{k,j}
+# Check if TPM has been calculated
+def check_TPM(adata, matrix_key='T_forward', recalc_matrix=False, self_transitions=False):
 
-    A log domain matrix multiplication
-    computes out_{i,j} = logsumexp_k log_A_{i,k} + log_B_{k,j}
-    
-    Parameters
-    ----------
-    
-    log_A : m x n
-    log_B : n x p
-    
-    Returns
-    -------
-    output : m x p matrix
-    
-    '''
-    m = log_A.shape[0]
-    n = log_A.shape[1]
-    p = log_B.shape[1]
+    # Recalcualte TPM if specified
+    if recalc_matrix:
+        adata.obsp[matrix_key] = get_transition_matrix(adata, self_transitions=self_transitions)
+        terminal_states(adata, self_transitions=self_transitions)
+    else:
+        try: 
+            assert adata.obsp[matrix_key].shape
+        except: 
+            adata.obsp[matrix_key] = get_transition_matrix(adata, self_transitions=self_transitions)
+            terminal_states(adata, self_transitions=self_transitions)
+            logging.warning('Transition probability matrix was not present in .uns and was calculated.')
 
-    # log_A_expanded = torch.stack([log_A] * p, dim=2)
-    # log_B_expanded = torch.stack([log_B] * m, dim=0)
-    # fix for PyTorch > 1.5 by egaznep on Github:
-    log_A_expanded = torch.reshape(log_A, (m,n,1))
-    log_B_expanded = torch.reshape(log_B, (1,n,p))
+        if not issparse(adata.obsp[matrix_key]):
+            adata.obsp[matrix_key] = csr_matrix(adata.obsp[matrix_key])
 
-    elementwise_sum = log_A_expanded + log_B_expanded
-    out = torch.logsumexp(elementwise_sum, dim=1)
+    # Recalculate root and terminal states if not present and TPM was not recalculated
+    try: 
+        assert 'root_cells' in adata.obs.columns
+        assert 'end_points' in adata.obs.columns
+    except: 
+        terminal_states(adata, self_transitions=self_transitions, random_state=None)
+        logging.warning('Root states were not present and were calculated.')
 
-    return out
+def check_root_init(adata, init='root_cells'):
+
+    # Initialise using root_cells, uniform or custom
+    if isinstance(init, str):
+        if init=='root_cells':
+            init_state_probability = (adata.obs['root_cells']/adata.obs['root_cells'].sum()).values
+            init_type = init
+        elif init=='uniform':
+            init_state_probability = [1/adata.shape[0]]*adata.shape[0]  # uniform probability to start at each cell
+            init_type = 'uniform'
+    elif isinstance(init, (collections.Sequence, np.ndarray)):
+        init_state_probability=init
+        init_type = 'custom'
+    else:
+        raise ValueError('Incorrect initialisation of state probabilities.')
+
+    return init_state_probability, init_type
+
+def estimate_stationary_state(adata, matrix_key='T_forward'):
+
+    # Stationary state distribution
+    stationary_state_probability = eigs(adata.obsp[matrix_key])[1]
+    if stationary_state_probability.shape[1] == 1:
+        stationary_state_probability /= stationary_state_probability.sum()
+    else:
+        stationary_state_probability = (adata.obs['end_points']/adata.obs['end_points'].sum()).values
+        logging.warning('Multiple eigenvalues > 1, falling back to end_points to infer stationary distribution.')
+    stationary_state_probability = stationary_state_probability.flatten()
+
+    return stationary_state_probability
 
 def log_domain_hardmax(tensor_, dim=0):
 
@@ -79,4 +111,31 @@ def log_domain_mean(tensor_, dim=0, use_gpu=False):
         log_mean = log_sum - torch.log(torch.Tensor([tensor_.shape[dim]]))
     return log_mean
 
+# Generalised Jensen-Shannon divergence
+class JSDLoss(torch.nn.Module):
+    def __init__(self, reduction='batchmean'):
+        super().__init__()
+        self.kl = torch.nn.KLDivLoss(reduction=reduction, log_target=True)
+
+    def forward(self, tensor):
+        weight = 1.0/tensor.shape[0]
+        centroid = log_domain_mean(tensor, dim=0)
+
+        return weight * sum([self.kl(centroid, tensor[i]) for i in range(tensor.shape[0])])
+
+# Gradient reversal from https://github.com/tadeephuy/GradientReversal
+class GradientReversal(Function):
+    @staticmethod
+    def forward(ctx, x, alpha):
+        ctx.save_for_backward(x, alpha)
+        return x
+    
+    @staticmethod
+    def backward(ctx, grad_output):
+        grad_input = None
+        _, alpha = ctx.saved_tensors
+        if ctx.needs_input_grad[0]:
+            grad_input = - alpha*grad_output
+        return grad_input, None
+revgrad = GradientReversal.apply
 
