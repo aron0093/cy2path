@@ -1,12 +1,12 @@
 import time
 import torch
-#torch.set_default_dtype(torch.float64)
-from ..utils import log_domain_matmul, log_domain_mean
+from ..utils import log_domain_mean, JSDLoss, revgrad
 
 class SSM(torch.nn.Module):
     
     ''' 
-    Switch state hidden Markov model trained on 
+    Switch state latent dynamic model 
+    with a common hidden state space trained on 
     a Markov state simulation of an observed state TPM
     with SGD.
     
@@ -20,6 +20,8 @@ class SSM(torch.nn.Module):
         Number of observed states in the MSM simulation.
     num_iters : int
         Number of iterations of the MSM simulation.
+    sparsity_weight : float (default: 1.0)
+        Regularisation weight for sparse latent TPM.
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
@@ -29,27 +31,28 @@ class SSM(torch.nn.Module):
     '''
     
     def __init__(self, num_states, num_chains, num_nodes, num_iters, 
-                 emissions_mask=None, use_gpu=False):
+                sparsity_weight = 1.0, use_gpu=False):
 
         super().__init__()
         self.num_nodes = num_nodes
         self.num_chains = num_chains
         self.num_states = num_states
         self.num_iters = num_iters
+        self.sparsity_weight = sparsity_weight
         self.use_gpu = use_gpu
         
         # Initial probability of being in any given hidden state
         self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states))
 
         # Intialise the weights of each node towards each chain
-        # Removed dependency on iter
         self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_states,
                                                                          self.num_chains,
-                                                                            
                                                                         ))
 
-        # Initialise emission matrix -> common for either chain
+        # Initialise emission matrix
+        # Enforce common state space
         self.unnormalized_emission_matrix = torch.nn.Parameter(torch.randn(self.num_states,
+                                                                           #self.num_chains,
                                                                            self.num_nodes
                                                                           ))
                 
@@ -62,7 +65,6 @@ class SSM(torch.nn.Module):
         self.is_cuda = torch.cuda.is_available() and self.use_gpu
         if self.is_cuda: 
             self.cuda()
-            self.emissions_mask = self.emissions_mask.cuda()
 
     def forward_model(self):
     
@@ -73,7 +75,7 @@ class SSM(torch.nn.Module):
         log_chain_weights = torch.nn.functional.log_softmax(self.unnormalized_chain_weights, dim=1)
         
         # Normalise across chains for each state
-        log_emission_matrix = torch.nn.functional.log_softmax(self.unnormalized_emission_matrix, dim=1) 
+        log_emission_matrix = torch.nn.functional.log_softmax(self.unnormalized_emission_matrix, dim=-1)
 
         # Normalise TPM so that they are probabilities (log space)
         log_transition_matrix = torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1)
@@ -88,21 +90,21 @@ class SSM(torch.nn.Module):
 
         # Initialise at iteration 0
         log_hidden_state_probs[0] = log_state_init
-        log_observed_state_probs_[0] = (torch.permute(log_emission_matrix.repeat(2,1,1), (1,0,-1)) + \
-                                                      log_chain_weights.unsqueeze(-1)) + \
-                                                      log_hidden_state_probs[[0]].transpose(1,0).unsqueeze(-1)
+        log_observed_state_probs_[0] = (log_emission_matrix.unsqueeze(-1).permute(0,-1,1)+ \
+                                       log_chain_weights.unsqueeze(-1)) + \
+                                       log_hidden_state_probs[[0]].transpose(1,0).unsqueeze(-1)
         
         for t in range(1, self.num_iters):
-            log_hidden_state_probs[t] = log_domain_matmul(log_hidden_state_probs[[t-1]], log_transition_matrix)                                   
-            log_observed_state_probs_[t] = (torch.permute(log_emission_matrix.repeat(2,1,1), (1,0,-1)) + \
-                                                      log_chain_weights.unsqueeze(-1)) + \
-                                                      log_hidden_state_probs[[t]].transpose(1,0).unsqueeze(-1)
+            log_hidden_state_probs[t] = (log_hidden_state_probs[[t-1]].unsqueeze(-1) + log_transition_matrix.unsqueeze(0)).logsumexp(1)                                   
+            log_observed_state_probs_[t] = (log_emission_matrix.unsqueeze(-1).permute(0,-1,1) + \
+                                           log_chain_weights.unsqueeze(-1)) + \
+                                           log_hidden_state_probs[[t]].transpose(1,0).unsqueeze(-1) 
 
         log_observed_state_probs = log_observed_state_probs_.logsumexp(1).logsumexp(1)
 
         return log_observed_state_probs, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights
 
-    def train(self, D, TPM=None, num_epochs=1000, optimizer=None, criterion=None, swa_scheduler=None, swa_start=200):
+    def train(self, D, TPM=None, num_epochs=300, optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
         
         '''
         Train the model.
@@ -123,6 +125,8 @@ class SSM(torch.nn.Module):
             SWA scheduler.
         swa_start : int (default: 200)
             Training epoch to start SWA.
+        verbose : bool (default: False)
+            Toggle printing of training history
         
         '''
 
@@ -135,11 +139,17 @@ class SSM(torch.nn.Module):
         try: assert self.loss_values
         except: self.loss_values = []
 
-        try: assert self.penality_values
-        except: self.penality_values = []
+        try: assert self.reconstruction_values
+        except: self.reconstruction_values = []
 
         try: assert self.sparsity_values
         except: self.sparsity_values = []
+
+        try: assert self.regularisation_values
+        except: self.regularisation_values = []
+
+        try: assert self.independence_values
+        except: self.independence_values = []
         
         self.optimizer = optimizer
         if self.optimizer is None:
@@ -155,27 +165,28 @@ class SSM(torch.nn.Module):
             self.optimizer.zero_grad()
             prediction, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights = self.forward_model()
 
-            if TPM is not None:
-                loss_ = self.criterion(prediction, D) 
+            loss = self.criterion(prediction, D)
+            reconstruction = loss.item()
+            self.reconstruction_values.append(reconstruction)
 
-                self.penalty_criterion = torch.nn.KLDivLoss(reduction='batchmean', log_target=True)
-
-                log_state_emission_matrix = torch.transpose(log_emission_matrix, 1,0)
-                log_transition_emission_matrix = log_domain_matmul(TPM.log(), log_state_emission_matrix.detach())
-                penalty = 1000*self.penalty_criterion(log_transition_emission_matrix, log_state_emission_matrix)
-
-                loss = loss_ + penalty
-                self.penality_values.append(penalty.item())
-
-            else:
-                loss = self.criterion(prediction, D) + self.criterion(torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1),
-                                                                      torch.eye(self.num_states))
-
-            
             sparsity = self.criterion(torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1),
                                                                       torch.eye(self.num_states))
-            loss += sparsity
+            loss += self.sparsity_weight*sparsity
             self.sparsity_values.append(sparsity.item())
+
+            log_chain_observed_state_probs = log_domain_mean(log_observed_state_probs_.logsumexp(1),0) + \
+                                             log_domain_mean(log_chain_weights,0).unsqueeze(-1)
+            log_chain_observed_state_probs = log_chain_observed_state_probs - \
+                                             log_chain_observed_state_probs.logsumexp(0).unsqueeze(0)                           
+            independence = JSDLoss(reduction='batchmean').forward(log_chain_observed_state_probs)
+            loss += revgrad(independence, torch.tensor([1.]))
+            self.independence_values.append(independence.item())
+
+            if TPM is not None:
+                regularisation =  self.criterion(torch.nn.functional.log_softmax(self.unnormalized_emission_matrix, dim=-1),
+                                                 torch.matmul(torch.exp(log_emission_matrix.detach()), TPM))
+                loss += regularisation
+                self.regularisation_values.append(regularisation)
 
             loss.backward()
             self.optimizer.step()
@@ -193,18 +204,23 @@ class SSM(torch.nn.Module):
                 avg_corrcoeff = torch.mean(torch.tensor(corrcoeffs))
 
                 # Print Loss
-                if TPM is not None:
-                    print('Time: {:.2f}s. Iteration: {:.2E}. Loss: {:.2E}. Sparsity: {:.2E}. Penalty: {:.2E}. Corrcoeff: {:.2E}.'.format(time.time() - start_time,
-                                                                                self.elapsed_epochs, 
-                                                                                loss.item(), 
-                                                                                sparsity.item(),
-                                                                                penalty.item(),
-                                                                                avg_corrcoeff))
-                else:
-                    print('Time: {:.2f}s. Iteration: {:.2E}. Loss: {:.2E}. Sparsity: {:.2E}. Corrcoeff: {:.2E}.'.format(time.time() - start_time,
-                                                                                self.elapsed_epochs, 
-                                                                                loss.item(),
-                                                                                sparsity.item(),
-                                                                                avg_corrcoeff))
+                if verbose:
+                    if TPM is not None:
+                        print('Time: {:.2f}s. Iteration: {}. Loss: {:.2E}. Recons: {:.2E}. Sparsity: {:.2E}. Reg: {:.2E}. Ind: {:.2E}. Corrcoeff: {:.2f}.'.format(time.time() - start_time,
+                                                                                    self.elapsed_epochs, 
+                                                                                    self.loss_values[-1],
+                                                                                    self.reconstruction_values[-1],
+                                                                                    self.sparsity_values[-1],
+                                                                                    self.regularisation_values[-1],
+                                                                                    self.independence_values[-1],
+                                                                                    avg_corrcoeff))
+                    else:
+                        print('Time: {:.2f}s. Iteration: {}. Loss: {:.2E}. Recons: {:.2E}. Sparsity: {:.2E}. Ind: {:.2E}. Corrcoeff: {:.2f}.'.format(time.time() - start_time,
+                                                                                    self.elapsed_epochs, 
+                                                                                    self.loss_values[-1],
+                                                                                    self.reconstruction_values[-1],
+                                                                                    self.sparsity_values[-1],
+                                                                                    self.independence_values[-1],
+                                                                                    avg_corrcoeff))
                 
             
