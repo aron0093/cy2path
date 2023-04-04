@@ -35,10 +35,10 @@ def add_expected_steps(data, copy=False):
     adata = data.copy() if copy else data
 
     # Check if fundamental matrix exists
-    try: N = adata.uns['state_probability_sampling']['fundamental_matrix']
+    try: N = adata.uns['cell_fate']['fundamental_matrix']
     except: raise ValueError('Fundamental matrix could not be recovered. Run infer_fate_distribution() first')
 
-    transition_state_indices = adata.uns['state_probability_sampling']['transition_state_indices']
+    transition_state_indices = adata.uns['cell_fate']['transition_state_indices']
 
     expected_steps = np.zeros(adata.shape[0])
     expected_steps[transition_state_indices] = calculate_expected_steps(N)
