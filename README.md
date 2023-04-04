@@ -1,4 +1,4 @@
-### Factorial CRF models trained on Markovian simulations of biological processes using scRNAseq. data.
+### Factorial latent dynamic models trained on Markovian simulations of biological processes using scRNAseq. data.
 
 <table border="0">
 <tr >
