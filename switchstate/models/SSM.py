@@ -28,7 +28,7 @@ class SSM(torch.nn.Module):
     P(state/iter) is parametarised as a HMM i.e. P(state_current/state_previous)
 
     '''
-    
+
     def __init__(self, num_states, num_chains, num_nodes, num_iters, use_gpu=False):
 
         super().__init__()
@@ -49,7 +49,7 @@ class SSM(torch.nn.Module):
         # Initialise emission matrix
         # Enforce common state space
         self.unnormalized_emission_matrix = torch.nn.Parameter(torch.randn(self.num_states,
-                                                                           #self.num_chains,
+                                                                           1, #self.num_chains
                                                                            self.num_nodes
                                                                           ))
                 
@@ -63,19 +63,20 @@ class SSM(torch.nn.Module):
         if self.is_cuda: 
             self.cuda()
 
+    # Simulate MSM using latent model
     def forward_model(self):
-    
+
         # Normalise across states 
-        log_state_init = torch.nn.functional.log_softmax(self.unnormalized_state_init, dim=0)
+        self.log_state_init = torch.nn.functional.log_softmax(self.unnormalized_state_init, dim=-1)
 
         # Normalise chain weights
-        log_chain_weights = torch.nn.functional.log_softmax(self.unnormalized_chain_weights, dim=1)
+        self.log_chain_weights = torch.nn.functional.log_softmax(self.unnormalized_chain_weights, dim=-1)
         
         # Normalise across chains for each state
-        log_emission_matrix = torch.nn.functional.log_softmax(self.unnormalized_emission_matrix, dim=-1)
+        self.log_emission_matrix = torch.nn.functional.log_softmax(self.unnormalized_emission_matrix, dim=-1)
 
         # Normalise TPM so that they are probabilities (log space)
-        log_transition_matrix = torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1)
+        self.log_transition_matrix = torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=-1)
 
         # MSM iteration wise probability calculation
         log_hidden_state_probs = torch.zeros(self.num_iters, self.num_states)
@@ -86,23 +87,116 @@ class SSM(torch.nn.Module):
             log_observed_state_probs_ = log_observed_state_probs_.cuda()
 
         # Initialise at iteration 0
-        log_hidden_state_probs[0] = log_state_init
-        log_observed_state_probs_[0] = (log_emission_matrix.unsqueeze(-1).permute(0,-1,1)+ \
-                                       log_chain_weights.unsqueeze(-1)) + \
-                                       log_hidden_state_probs[[0]].transpose(1,0).unsqueeze(-1)
+        log_hidden_state_probs[0] = self.log_state_init
+        log_observed_state_probs_[0] = (self.log_emission_matrix + \
+                                       self.log_chain_weights.unsqueeze(-1)) + \
+                                       log_hidden_state_probs[0].unsqueeze(-1).unsqueeze(-1)
         
         for t in range(1, self.num_iters):
-            log_hidden_state_probs[t] = (log_hidden_state_probs[[t-1]].unsqueeze(-1) + log_transition_matrix.unsqueeze(0)).logsumexp(1)                                   
-            log_observed_state_probs_[t] = (log_emission_matrix.unsqueeze(-1).permute(0,-1,1) + \
-                                           log_chain_weights.unsqueeze(-1)) + \
-                                           log_hidden_state_probs[[t]].transpose(1,0).unsqueeze(-1) 
+            log_hidden_state_probs[t] = (log_hidden_state_probs[t-1].unsqueeze(-1) + self.log_transition_matrix.unsqueeze(0)).logsumexp(1)                                   
+            log_observed_state_probs_[t] = (self.log_emission_matrix + \
+                                           self.log_chain_weights.unsqueeze(-1)) + \
+                                           log_hidden_state_probs[t].unsqueeze(-1).unsqueeze(-1) 
 
         log_observed_state_probs = log_observed_state_probs_.logsumexp(1).logsumexp(1)
 
-        return log_observed_state_probs, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights
+        return log_observed_state_probs, log_observed_state_probs_, log_hidden_state_probs
+    
+    # Conditional hidden state probabilities given observed sequence till current iteration
+    def filtering(self, D):
+
+        log_alpha = torch.zeros(self.num_iters, self.num_states, self.num_chains)
+        log_probs = torch.zeros(self.num_iters, self.num_chains)
+        if self.is_cuda: 
+            log_alpha = log_alpha.cuda()
+            log_probs = log_probs.cuda()
+
+        # Initialise at iteration 0
+        log_alpha[0] = (D.log()[0].unsqueeze(0).unsqueeze(0) + self.log_emission_matrix + \
+                        self.log_chain_weights.unsqueeze(-1) + \
+                        self.log_state_init.unsqueeze(-1).unsqueeze(-1)).logsumexp(-1)
+        log_probs[0] = log_alpha[0].clone().detach().logsumexp(0)
+        log_alpha[0] = log_alpha[0] - log_probs[0].unsqueeze(0)
+        
+        for t in range(1, self.num_iters):
+            log_alpha[t] = (D.log()[t].unsqueeze(0).unsqueeze(0) + self.log_emission_matrix + \
+                            self.log_chain_weights.unsqueeze(-1) + \
+                            (log_alpha[t-1].transpose(1,0).unsqueeze(-1) + \
+                            self.log_transition_matrix.unsqueeze(0)).logsumexp(1).transpose(1,0).unsqueeze(-1)).logsumexp(-1)   
+            log_probs[t] = log_alpha[t].clone().detach().logsumexp(0)
+            log_alpha[t] = log_alpha[t] - log_probs[t].unsqueeze(0)
+
+        return log_alpha, log_probs
+
+    # Conditional hidden state probabilities given an observed sequence
+    def smoothing(self, D):
+
+        log_alpha, log_probs = self.filtering(D)
+        log_beta = torch.zeros(self.num_iters, self.num_states, self.num_chains)
+        log_gamma = torch.zeros(self.num_iters, self.num_states, self.num_chains)
+
+        if self.is_cuda: 
+            log_beta = log_beta.cuda()
+            log_gamma = log_gamma.cuda()
+
+        # Initialise at iteration 0
+        log_beta[-1] = (self.log_transition_matrix.unsqueeze(-1) + \
+                       (D.log()[-1].unsqueeze(0).unsqueeze(0) + self.log_emission_matrix + \
+                       self.log_chain_weights.unsqueeze(-1) + \
+                       torch.tensor([1.0]*self.num_states).log().unsqueeze(-1).unsqueeze(-1)).logsumexp(-1).unsqueeze(0)).logsumexp(1)
+        
+        log_gamma[-1] = log_beta[-1] - log_probs.sum(0).unsqueeze(0) + log_alpha[-1] 
+        
+        for t in range(self.num_iters-1, 0, -1):
+            log_beta[t-1] = (self.log_transition_matrix.unsqueeze(-1) + \
+                            (D.log()[-1].unsqueeze(0).unsqueeze(0) + self.log_emission_matrix + \
+                            self.log_chain_weights.unsqueeze(-1) + \
+                            log_beta[t].unsqueeze(-1)).logsumexp(-1).unsqueeze(0)).logsumexp(1)
+            
+            log_gamma[t-1] = log_beta[t-1] - log_probs.sum(0).unsqueeze(0) + log_alpha[t-1] 
+
+        return log_beta, log_gamma
+        
+    # Viterbi decoding for best path
+    def viterbi(self, D):
+
+        log_delta = torch.zeros(self.num_iters, self.num_states, self.num_chains)
+        psi = torch.zeros(self.num_iters, self.num_states, self.num_chains)
+
+        if self.is_cuda: 
+            log_delta = log_delta.cuda()
+            psi = psi.cuda()
+
+        log_delta[0] = (D.log()[0].unsqueeze(0).unsqueeze(0) + self.log_emission_matrix + \
+                        self.log_chain_weights.unsqueeze(-1) + \
+                        self.log_state_init.unsqueeze(-1).unsqueeze(-1)).logsumexp(-1)
+
+        for t in range(1, self.num_iters):
+            max_val, argmax_val = torch.max(log_delta[t-1].transpose(1,0).unsqueeze(-1) + \
+                                            self.log_transition_matrix.unsqueeze(0), dim=1)
+
+            log_delta[t] = (D.log()[t].unsqueeze(0).unsqueeze(0) + self.log_emission_matrix + \
+                           self.log_chain_weights.unsqueeze(-1) + \
+                           max_val.transpose(1,0).unsqueeze(0).unsqueeze(-1)).logsumexp(-1)
+            psi[t] = argmax_val.transpose(1,0)
+
+        # Get the log probability of the best paths
+        log_max = log_delta.max(dim=1)[0]
+
+        best_path = []
+        for i in range(0, self.num_chains):
+            best_path_i = [log_delta[self.num_iters-1, :, i].max(dim=-1)[1].item()]
+            for t in range(self.num_iters-1, 0, -1):
+                latent_t = psi[t, int(best_path_i[0]), i].item()
+                best_path_i.insert(0, latent_t) 
+
+            best_path.append(best_path_i)
+
+        return log_delta, psi, log_max, best_path
 
     def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
-              optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
+              optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, 
+              verbose=False):
         
         '''
         Train the model.
@@ -141,8 +235,11 @@ class SSM(torch.nn.Module):
         try: assert self.loss_values
         except: self.loss_values = []
 
-        try: assert self.reconstruction_values
-        except: self.reconstruction_values = []
+        try: assert self.divergence_values
+        except: self.divergence_values = []
+            
+        try: assert self.likelihood_values
+        except: self.likelihood_values = []
 
         try: assert self.sparsity_values
         except: self.sparsity_values = []
@@ -165,19 +262,23 @@ class SSM(torch.nn.Module):
         for epoch in tqdm(range(num_epochs), desc='Training dynamic model'):
 
             self.optimizer.zero_grad()
-            prediction, log_observed_state_probs_, log_hidden_state_probs, log_emission_matrix, log_chain_weights = self.forward_model()
+            prediction, log_observed_state_probs_, log_hidden_state_probs = self.forward_model()
+            log_alpha, log_probs = self.filtering(D)
+            
+            divergence = self.criterion(prediction, D)
+            loss = divergence
+            self.divergence_values.append(divergence.item())
 
-            loss = self.criterion(prediction, D)
-            reconstruction = loss.item()
-            self.reconstruction_values.append(reconstruction)
+            likelihood = log_alpha.max(1)[0].logsumexp(0).logsumexp(0)
+            #loss = -likelihood
+            self.likelihood_values.append(likelihood.item())
 
-            sparsity = self.criterion(torch.nn.functional.log_softmax(self.unnormalized_transition_matrix, dim=1),
-                                                                      torch.eye(self.num_states))
+            sparsity = self.criterion(self.log_transition_matrix, torch.eye(self.num_states))
             loss += self.sparsity_weight*sparsity
             self.sparsity_values.append(sparsity.item())
 
             log_chain_observed_state_probs = log_domain_mean(log_observed_state_probs_.logsumexp(1),0) + \
-                                             log_domain_mean(log_chain_weights,0).unsqueeze(-1)
+                                             log_domain_mean(self.log_chain_weights,0).unsqueeze(-1)
             log_chain_observed_state_probs = log_chain_observed_state_probs - \
                                              log_chain_observed_state_probs.logsumexp(0).unsqueeze(0)                           
             independence = JSDLoss(reduction='batchmean').forward(log_chain_observed_state_probs)
@@ -185,10 +286,10 @@ class SSM(torch.nn.Module):
             self.independence_values.append(independence.item())
 
             if TPM is not None:
-                regularisation = self.criterion(torch.nn.functional.log_softmax(self.unnormalized_emission_matrix, dim=-1),
-                                                 torch.matmul(torch.exp(log_emission_matrix.detach()), TPM))
+                regularisation = self.criterion(self.log_emission_matrix, 
+                                                torch.matmul(torch.exp(self.log_emission_matrix.detach()), TPM))
                 loss += regularisation
-                self.regularisation_values.append(regularisation)
+                self.regularisation_values.append(regularisation.item())
 
             loss.backward()
             self.optimizer.step()
@@ -208,19 +309,21 @@ class SSM(torch.nn.Module):
                 # Print Loss
                 if verbose:
                     if TPM is not None:
-                        print('Time: {:.2f}s. Iteration: {}. Loss: {:.2E}. Recons: {:.2E}. Sparsity: {:.2E}. Reg: {:.2E}. Ind: {:.2E}. Corrcoeff: {:.2f}.'.format(time.time() - start_time,
+                        print('Time: {:.2f}s. Iter: {}. Loss: {:.2E}. KL: {:.2E}. Likl: {:.2E}. Sparse: {:.2E}. Reg: {:.2E}. Ind: {:.2E}. Corcoef: {:.2f}.'.format(time.time() - start_time,
                                                                                     self.elapsed_epochs, 
                                                                                     self.loss_values[-1],
-                                                                                    self.reconstruction_values[-1],
+                                                                                    self.divergence_values[-1],
+                                                                                    self.likelihood_values[-1],
                                                                                     self.sparsity_values[-1],
                                                                                     self.regularisation_values[-1],
                                                                                     self.independence_values[-1],
                                                                                     avg_corrcoeff))
                     else:
-                        print('Time: {:.2f}s. Iteration: {}. Loss: {:.2E}. Recons: {:.2E}. Sparsity: {:.2E}. Ind: {:.2E}. Corrcoeff: {:.2f}.'.format(time.time() - start_time,
+                        print('Time: {:.2f}s. Iter: {}. Loss: {:.2E}. KL: {:.2E}. Likl: {:.2E}. Sparse: {:.2E}. Ind: {:.2E}. Corcoef: {:.2f}.'.format(time.time() - start_time,
                                                                                     self.elapsed_epochs, 
                                                                                     self.loss_values[-1],
-                                                                                    self.reconstruction_values[-1],
+                                                                                    self.divergence_values[-1],
+                                                                                    self.likelihood_values[-1],                                                    
                                                                                     self.sparsity_values[-1],
                                                                                     self.independence_values[-1],
                                                                                     avg_corrcoeff))
