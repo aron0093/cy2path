@@ -1,6 +1,7 @@
 from .sampling import sample_state_probability, iterate_state_probability
 from .simulation import iterate_markov_chain, sample_markov_chains
 from .pseudotime import infer_pseudotime, add_expected_steps
+from .dynamics import infer_latent_dynamics, infer_kinetic_clusters
 
 from .cytopath import infer_cytopath_lineages
 
