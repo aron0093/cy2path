@@ -203,11 +203,11 @@ class SSM_node(torch.nn.Module):
             MSM simulation data.
         TPM : Transition probability matrix
             Used to regularise emission probabilities.
-        num_epochs : int (default: 1000)
+        num_epochs : int (default: 300)
             Number of training epochs
         sparsity_weight : float (default: 1.0)
             Regularisation weight for sparse latent TPM.
-        optimizer : (default: Adam(lr=0.1))
+        optimizer : (default: RMSProp(lr=0.2))
             Optimizer algorithm.
         criterion : (default: KLDivLoss())
             Loss function. (Default preferred)
@@ -248,7 +248,7 @@ class SSM_node(torch.nn.Module):
         
         self.optimizer = optimizer
         if self.optimizer is None:
-            self.optimizer = torch.optim.RMSprop(self.parameters(), lr=0.1)
+            self.optimizer = torch.optim.RMSprop(self.parameters(), lr=0.2)
         self.swa_scheduler = swa_scheduler
         self.criterion = criterion
         if self.criterion is None:
