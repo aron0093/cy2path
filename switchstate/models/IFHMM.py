@@ -1,7 +1,7 @@
 import time
 import torch
 from tqdm.auto import tqdm
-from ..utils import log_domain_mean, JSDLoss, revgrad
+from ..utils import log_domain_mean
 
 class IFHMM(torch.nn.Module):
     
@@ -24,7 +24,7 @@ class IFHMM(torch.nn.Module):
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
-    P(node/iter) = P(node/state, chain, iter)P(state/chain, iter)P(chain/iter)
+    P(node/iter) = sigma_chain sigma_state P(node/state, chain, iter)P(state/chain, iter)P(chain/iter)
     P(state/iter) is parametarised as a HMM i.e. P(state_current/state_previous)
 
     '''
@@ -164,8 +164,8 @@ class IFHMM(torch.nn.Module):
             psi = psi.cuda()
 
         log_delta[0] = (D.log()[0].unsqueeze(0).unsqueeze(0) + self.log_emission_matrix + \
-                        self.log_state_init.unsqueeze(-1).unsqueeze(-1)).logsumexp(-1)
-
+                        self.log_state_init.unsqueeze(-1)).logsumexp(-1)
+        
         for t in range(1, self.num_iters):
             max_val, argmax_val = torch.max(log_delta[t-1].transpose(1,0).unsqueeze(-1) + \
                                             self.log_transition_matrix.unsqueeze(0), dim=1)
@@ -201,11 +201,11 @@ class IFHMM(torch.nn.Module):
             MSM simulation data.
         TPM : Transition probability matrix
             Used to regularise emission probabilities.
-        num_epochs : int (default: 1000)
+        num_epochs : int (default: 300)
             Number of training epochs
         sparsity_weight : float (default: 1.0)
             Regularisation weight for sparse latent TPM.
-        optimizer : (default: Adam(lr=0.1))
+        optimizer : (default: RMSprop(lr=0.2))
             Optimizer algorithm.
         criterion : (default: KLDivLoss())
             Loss function. (Default preferred)
@@ -246,7 +246,7 @@ class IFHMM(torch.nn.Module):
         
         self.optimizer = optimizer
         if self.optimizer is None:
-            self.optimizer = torch.optim.RMSprop(self.parameters(), lr=0.1)
+            self.optimizer = torch.optim.RMSprop(self.parameters(), lr=0.2)
         self.swa_scheduler = swa_scheduler
         self.criterion = criterion
         if self.criterion is None:
@@ -271,12 +271,8 @@ class IFHMM(torch.nn.Module):
             loss += self.sparsity_weight*sparsity
             self.sparsity_values.append(sparsity.item())
 
-            log_chain_observed_state_probs = log_domain_mean(log_observed_state_probs_.logsumexp(1),0) + \
-                                             self.log_chain_weights.unsqueeze(-1)
-            log_chain_observed_state_probs = log_chain_observed_state_probs - \
-                                             log_chain_observed_state_probs.logsumexp(0).unsqueeze(0)                           
-            independence = JSDLoss(reduction='batchmean').forward(log_chain_observed_state_probs)
-            loss += revgrad(independence, torch.tensor([1.]))
+            independence = log_domain_mean(log_domain_mean(log_observed_state_probs_).logsumexp(0).sum(0)).squeeze()
+            loss -= 1/independence
             self.independence_values.append(independence.item())
 
             if TPM is not None:
