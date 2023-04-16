@@ -64,13 +64,6 @@ def latent_state_selection(adata, criteria=None, min_ratio=None):
     try: assert adata.uns['latent_dynamics']['model_outputs']
     except: raise ValueError('Model outputs are missing. Run infer_latent_dynamics() first')
 
-    # Filter out states with too few cells
-    if min_ratio is not None:
-        states, counts = np.unique(adata.uns['latent_dynamics']['emission_matrix'].argmax(0),
-                                   return_counts=True)
-        freqs = counts/adata.shape[0]
-        selected_states = states[freqs>=min_ratio]
-
     # Restrict latent state space heuristically (alternative to computational expensive model selection process)    
     if criteria is None:
         selected_states = np.arange(adata.uns['latent_dynamics']['latent_dynamics_params']['num_states'])
@@ -81,7 +74,13 @@ def latent_state_selection(adata, criteria=None, min_ratio=None):
     elif criteria == 'viterbi':
         selected_states = np.unique(adata.uns['latent_dynamics']['model_outputs']['viterbi_path'].flatten())
 
-    if criteria is not None:
+    # Filter out states with too few cells
+    if min_ratio is not None:
+        state_ratio = adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes'].sum(1)/adata.shape[0]
+        state_ratio = state_ratio[selected_states]
+        selected_states = selected_states[state_ratio>=min_ratio]
+
+    if criteria is not None and min_ratio is None:
         if len(selected_states)==adata.uns['latent_dynamics']['latent_dynamics_params']['num_states']:
             logging.warning('Number of kinetic states equals num_states. Consider initialising with more latent states')
 
@@ -191,9 +190,9 @@ def infer_latent_paths(data, criteria=None, min_ratio=None, copy=False):
     if criteria is None or criteria=='viterbi':
         lineage_paths = adata.uns['latent_dynamics']['model_outputs']['viterbi_path']
     elif criteria=='argmax_smoothing':
-        lineage_paths = adata.uns['latent_dynamics']['smoothing'].argmax(1)
+        lineage_paths = adata.uns['latent_dynamics']['model_outputs']['smoothing'].argmax(1)
     elif criteria=='argmax_joint':
-        lineage_paths = adata.uns['latent_dynamics']['joint_probabilities'].sum(-1).argmax(1)
+        lineage_paths = adata.uns['latent_dynamics']['model_outputs']['joint_probabilities'].sum(-1).argmax(1)
 
     condensed_lineage_paths = {}
     for lineage in range(adata.uns['latent_dynamics']['latent_dynamics_params']['num_chains']):
