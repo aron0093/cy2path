@@ -67,7 +67,8 @@ def plot_latent_transitions(adata, ax=None):
 
     sns.lineplot(adata.uns['latent_dynamics']['posthoc_computations']['latent_paths'].astype(int), ax=ax) 
     ax.set_title('Viterbi decoding per lineage')
-
+    ax.set_yticks(np.unique(adata.uns['latent_dynamics']['posthoc_computations']['latent_paths'].astype(int)))
+    
     return ax
 
 # Heatmap P(lineage/state)
@@ -110,7 +111,8 @@ def plot_latent_paths(adata, color='whitesmoke', basis='umap', ax=None):
                 edgecolors='none',
                 ax=ax)
 
-    color_range = ['black', 'red', 'blue', 'green', 'yellow']
+    color_range = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3",
+                   "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD"]
     for lineage, path in lineage_paths.items():
         for step in range(len(path)-1):
             ax.arrow(node_coordinates.loc[path[step], 0],
@@ -260,7 +262,7 @@ def plot_latent_summary(adata, use_selected=True, ncols=4, basis='umap', figsize
     probs = probs[selected_states]
     probs = probs/probs.sum(0)
 
-    nrows = max(int(np.ceil(selected_states.shape[0]/ncols)),1)
+    nrows = max(int(np.ceil((selected_states.shape[0]*2)/ncols)),1)
 
     figsize = (figsize[0]*ncols,figsize[1]*nrows)
     fig, axs = plt.subplots(ncols=4, nrows=nrows, figsize=figsize)
@@ -272,12 +274,12 @@ def plot_latent_summary(adata, use_selected=True, ncols=4, basis='umap', figsize
         else:
             scatter(adata, color='silver', basis=basis, ax=axs.flat[i], show=False)
             scatter(adata, color=probs[int(i/2)], color_map='YlGnBu', 
-                    title='Hidden state prob. {}'.format(i), 
+                    title='Hidden state prob. {}'.format(selected_states[int(i/2)]), 
                     basis=basis, ax=axs.flat[i], show=False)
             
             scatter(adata, color='silver', basis=basis, ax=axs.flat[i+1], show=False)
             scatter(adata, color=pd.get_dummies(probs.argmax(0))[int(i/2)], color_map='YlGnBu', 
-                    title='Hidden state memb. {}'.format(i), 
+                    title='Hidden state memb. {}'.format(selected_states[int(i/2)]), 
                     basis=basis, ax=axs.flat[i+1], show=False)
 
     return fig, axs
