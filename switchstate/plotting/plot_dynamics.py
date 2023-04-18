@@ -32,7 +32,7 @@ def plot_loss(model, figsize=(15,7)):
     else:
         axs.flat[4].axis('off')
 
-    sns.lineplot(model.independence_values, ax=axs.flat[5])
+    sns.lineplot(model.exclusivity_values, ax=axs.flat[5])
     axs.flat[5].set_title('Kinetic state exclusivity')
 
     return fig, axs
