@@ -56,9 +56,34 @@ def extract_model_outputs(adata, model):
                                                                                      log_observed_state_probs_mean.logsumexp(0).logsumexp(0, keepdims=True))
     adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_state'] = exponentiate_detach(log_observed_state_probs_mean.logsumexp(-1) -\
                                                                                      log_observed_state_probs_mean.logsumexp(-1).logsumexp(1, keepdims=True))
+    
+# Compute conditional using selected states    
+def compute_conditionals(adata, use_selected=True):
+
+    if use_selected:
+        try: assert 'selected_states' in adata.uns['latent_dynamics']['posthoc_computations'].keys()
+        except: raise ValueError('No selected states. Run latent_state_selection() first')
+        selected_states = adata.uns['latent_dynamics']['posthoc_computations']['selected_states']
+    else:
+        selected_states = np.arange(adata.uns['latent_dynamics']['latent_dynamics_params']['num_states'])
+
+    joint_probs = adata.uns['latent_dynamics']['model_outputs']['joint_probabilities']
+    # Compute relevant conditionals
+    observed_state_probs_mean = joint_probs.mean(0)/joint_probs.mean(0)[selected_states].sum()
+
+    mask = np.ones(observed_state_probs_mean.shape[0], dtype=bool)
+    mask[selected_states] = False
+    observed_state_probs_mean[mask] = 0
+
+    adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes_selected'] = observed_state_probs_mean.sum(1) /\
+                                                                                     observed_state_probs_mean.sum(1).sum(0)
+    adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_nodes_selected'] = observed_state_probs_mean.sum(0) /\
+                                                                                     observed_state_probs_mean.sum(0).sum()
+    adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_state_selected'] = (observed_state_probs_mean.sum(-1).T /\
+                                                                                     observed_state_probs_mean.sum(-1).sum(1)).T
 
 # Select relevant latent states       
-def latent_state_selection(adata, criteria=None, min_ratio=None):
+def latent_state_selection(adata, states=None, criteria=None, min_ratio=None):
 
     # Check if model outputs exists
     try: assert adata.uns['latent_dynamics']['model_outputs']
@@ -73,6 +98,9 @@ def latent_state_selection(adata, criteria=None, min_ratio=None):
         selected_states = np.unique(adata.uns['latent_dynamics']['model_outputs']['smoothing'].argmax(1).flatten())
     elif criteria == 'viterbi':
         selected_states = np.unique(adata.uns['latent_dynamics']['model_outputs']['viterbi_path'].flatten())
+    
+    if states is not None:
+        selected_states = np.array(states)
 
     # Filter out states with too few cells
     if min_ratio is not None:
@@ -89,9 +117,12 @@ def latent_state_selection(adata, criteria=None, min_ratio=None):
     adata.uns['latent_dynamics']['latent_dynamics_params']['min_ratio'] = min_ratio
     adata.uns['latent_dynamics']['posthoc_computations']['selected_states'] = selected_states
 
+    compute_conditionals(adata, use_selected=True)
+
 # Fit the latent dynamic model
 def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epochs=100, 
                           mode='SSM', regularise_TPM=True, use_gpu=False, verbose=False,
+                          precomputed_emissions=None, precomputed_transitions=None,
                           save_model='./model', load_model=None, copy=False, **kwargs):
 
     adata = data.copy() if copy else data
@@ -124,6 +155,14 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
     if load_model is not None:
         model.load_state_dict(load_model)
 
+    if precomputed_emissions:
+        assert precomputed_emissions.shape==(model.num_states,1,model.num_nodes)
+        model.unnormalized_emission_matrix = torch.log(precomputed_emissions)
+    
+    if precomputed_transitions:
+        assert precomputed_transitions.shape==(model.num_states,model.num_states)
+        model.unnormalized_transition_matrix = torch.log(precomputed_transitions)
+
     # Train the model
     loss = model.train(state_history, TPM=TPM, num_epochs=num_epochs, verbose=verbose, **kwargs)
     
@@ -143,7 +182,7 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
     else: return model
 
 # Extract kinetic states
-def infer_kinetic_clusters(data, criteria=None, min_ratio=None, copy=False):
+def infer_kinetic_clusters(data, states=None, criteria=None, min_ratio=None, copy=False):
 
     adata = data.copy() if copy else data
 
@@ -152,22 +191,23 @@ def infer_kinetic_clusters(data, criteria=None, min_ratio=None, copy=False):
     except: raise ValueError('Latent states could not be recovered. Run infer_latent_dynamics() first')
 
     # Select latent states
-    latent_state_selection(adata, criteria=criteria, min_ratio=min_ratio)
+    latent_state_selection(adata, states=states, criteria=criteria, min_ratio=min_ratio)
 
     # Extract kinetic clustering and other params
     selected_states = adata.uns['latent_dynamics']['posthoc_computations']['selected_states']
-    kinetic_states_probs = adata.uns['latent_dynamics']['model_params']['emission_matrix'][selected_states]
+    kinetic_states_probs = adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes_selected']#[selected_states]
     
-    adata.obs['kinetic_states'] = selected_states[kinetic_states_probs.argmax(0).flatten()]
+    adata.obs['kinetic_states'] = kinetic_states_probs.argmax(0).flatten()#selected_states[kinetic_states_probs.argmax(0).flatten()]
     adata.obs['kinetic_states'] = adata.obs['kinetic_states'].astype('category')
 
+    #TODO: Compute with renormed probabilities
     adata.obs['cellular_entropy'] = entropy(adata.uns['latent_dynamics']['model_outputs']['joint_probabilities'][:, selected_states
                                                                                                                  ].mean(0)).sum(0)
     
     if copy: return adata
 
 # Infer most likely path in latent space
-def infer_latent_paths(data, criteria=None, min_ratio=None, copy=False):
+def infer_latent_paths(data, states=None, criteria=None, min_ratio=None, copy=False):
 
     adata = data.copy() if copy else data
 
@@ -176,12 +216,12 @@ def infer_latent_paths(data, criteria=None, min_ratio=None, copy=False):
     except: raise ValueError('Latent states could not be recovered. Run infer_latent_dynamics() first')
 
     # Select latent states
-    latent_state_selection(adata, criteria=criteria, min_ratio=min_ratio)
+    latent_state_selection(adata, states=states, criteria=criteria, min_ratio=min_ratio)
 
     # Infer lineages
-    selected_states = adata.uns['latent_dynamics']['posthoc_computations']['selected_states']
-    lineage_probs = np.matmul(adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_state'][selected_states].T,
-                              adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes'][selected_states])
+    #selected_states = adata.uns['latent_dynamics']['posthoc_computations']['selected_states']
+    lineage_probs = np.matmul(adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_state_selected'].T, #['selected]
+                              adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes_selected'])
 
     adata.obs['lineage'] = lineage_probs.argmax(0).astype(str).flatten()
 
