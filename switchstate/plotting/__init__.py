@@ -4,3 +4,4 @@ from .plot_heatmap import plot_persistence_heatmap
 from .plot_fate import plot_fate
 from .plot_lineage import plot_lineages
 from .plot_cluster_probabilities import plot_probability_by_clusters
+from .plot_dynamics import *

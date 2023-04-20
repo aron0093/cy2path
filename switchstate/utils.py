@@ -3,6 +3,8 @@ import os, contextlib
 import logging
 logging.basicConfig(level = logging.INFO)
 
+import collections
+
 from scvelo.utils import get_transition_matrix
 from scvelo.tools import terminal_states
 from scvelo.tools.terminal_states import eigs
@@ -64,6 +66,7 @@ def check_TPM(adata, matrix_key='T_forward', recalc_matrix=False, self_transitio
         terminal_states(adata, self_transitions=self_transitions, random_state=None)
         logging.warning('Root states were not present and were calculated.')
 
+# Check if root states can be initialised
 def check_root_init(adata, init='root_cells'):
 
     # Initialise using root_cells, uniform or custom
@@ -82,6 +85,7 @@ def check_root_init(adata, init='root_cells'):
 
     return init_state_probability, init_type
 
+# Estimate stationary state of TPM
 def estimate_stationary_state(adata, matrix_key='T_forward'):
 
     # Stationary state distribution
@@ -95,6 +99,11 @@ def estimate_stationary_state(adata, matrix_key='T_forward'):
 
     return stationary_state_probability
 
+# Exponentiate and detach pytroch tensor
+def exponentiate_detach(tensor):
+    return tensor.exp().cpu().detach().numpy()
+
+# Return argmax as one hot encoding in log domain
 def log_domain_hardmax(tensor_, dim=0):
 
     num_cats = tensor_.shape[dim]
@@ -102,6 +111,7 @@ def log_domain_hardmax(tensor_, dim=0):
     log_hardmax = torch.nn.functional.one_hot(argmax_, num_classes=num_cats).log().reshape(tensor_.shape)
     return log_hardmax
 
+# Take mean along axis in log domain
 def log_domain_mean(tensor_, dim=0, use_gpu=False):
 
     log_sum = tensor_.logsumexp(dim)
