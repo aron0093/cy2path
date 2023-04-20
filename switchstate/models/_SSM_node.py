@@ -104,6 +104,7 @@ class SSM_node(torch.nn.Module):
         if self.is_cuda: 
             log_alpha = log_alpha.cuda()
             log_probs = log_probs.cuda()
+            D = D.cuda()
 
         # Initialise at iteration 0
         log_alpha[0] = (D.log()[0].unsqueeze(0).unsqueeze(-1) + self.log_weights + \
@@ -132,6 +133,7 @@ class SSM_node(torch.nn.Module):
         if self.is_cuda: 
             log_beta = log_beta.cuda()
             log_gamma = log_gamma.cuda()
+            D = D.cuda()
 
         # Initialise at iteration 0
         log_beta[-1] = (self.log_transition_matrix.unsqueeze(-1) + \
@@ -160,6 +162,7 @@ class SSM_node(torch.nn.Module):
         if self.is_cuda: 
             log_delta = log_delta.cuda()
             psi = psi.cuda()
+            D = D.cuda()
 
         log_delta[0] = (D.log()[0].unsqueeze(0).unsqueeze(-1) + self.log_weights + \
                         self.log_state_init.unsqueeze(-1).unsqueeze(-1)).logsumexp(1)
@@ -187,10 +190,10 @@ class SSM_node(torch.nn.Module):
         return log_delta, psi, log_max, best_path
     
     # Train the model
-    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
+    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0, exclusivity_weight=1.0,
               optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, 
               verbose=False):
-        train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight,
+        train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
             optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, swa_start=swa_start, 
             verbose=verbose)
 

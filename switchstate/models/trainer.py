@@ -6,8 +6,8 @@ from ..utils import log_domain_mean
 from .methods import compute_log_likelihood   
 
 def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
-          optimizer=None, criterion=None, swa_scheduler=None, 
-          swa_start=200, verbose=False):
+          exclusivity_weight=1.0, optimizer=None, criterion=None, 
+          swa_scheduler=None, swa_start=200, verbose=False):
     
     '''
     Train the model.
@@ -22,6 +22,8 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         Number of training epochs
     sparsity_weight : float (default: 1.0)
         Regularisation weight for sparse latent TPM.
+    exclusivity_weight : float (default: 1.0)
+        Regularisation weight for orthogonal EM.
     optimizer : (default: RMSProp(lr=0.2))
         Optimizer algorithm.
     criterion : (default: KLDivLoss())
@@ -39,6 +41,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         D = D.cuda()
     
     self.sparsity_weight = sparsity_weight
+    self.exclusivity_weight = exclusivity_weight
         
     try: assert self.elapsed_epochs
     except: self.elapsed_epochs = 0
@@ -83,20 +86,25 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         compute_log_likelihood(self)
         self.likelihood_values.append(self.log_likelihood.item())
 
-        sparsity = self.criterion(self.log_transition_matrix, torch.eye(self.num_states))
+        identity = torch.eye(self.num_states)
+        if self.is_cuda:
+            identity = identity.cuda()
+
+        sparsity = self.criterion(self.log_transition_matrix, identity)
         loss += self.sparsity_weight*sparsity
         self.sparsity_values.append(sparsity.item())
                         
-        #exclusivity = log_domain_mean(log_observed_state_probs_, 0).logsumexp(0).sum(0).logsumexp(0)
         exclusivity = self.criterion(torch.corrcoef(self.log_emission_matrix[:,0].exp()).log(),
-                                     torch.eye(self.num_states))
-        loss += exclusivity
+                                     identity)
+        loss += self.exclusivity_weight*exclusivity
         self.exclusivity_values.append(exclusivity.item())
 
         if TPM is not None:
+            if self.is_cuda:
+                TPM = TPM.cuda()
             regularisation = self.criterion(self.log_emission_matrix, 
                                             torch.matmul(torch.exp(self.log_emission_matrix.detach()), TPM))
-            #loss += regularisation
+            loss += regularisation
             self.regularisation_values.append(regularisation.item())
 
         loss.backward()

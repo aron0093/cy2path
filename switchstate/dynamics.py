@@ -139,6 +139,8 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
 
     # MSM simulation 
     state_history = torch.Tensor(adata.uns['state_probability_sampling']['state_history'])
+    if use_gpu:
+        state_history = state_history.cuda()
 
     # Initialise the model
     if not model:

@@ -19,8 +19,10 @@ def compute_log_likelihood(self):
 
     prediction, log_observed_state_probs_, log_hidden_state_probs = self.forward_model()
 
-    self.log_likelihood = (log_domain_mean(log_observed_state_probs_) - \
-                           log_domain_mean(log_observed_state_probs_).logsumexp(-1, keepdims=True)).logsumexp(0).logsumexp(0).sum()
+    self.log_likelihood = (log_domain_mean(log_observed_state_probs_, use_gpu=self.is_cuda) - \
+                           log_domain_mean(log_observed_state_probs_, use_gpu=self.is_cuda).logsumexp(0, 
+                                                                                                      keepdims=True).logsumexp(1, 
+                                                                                                      keepdims=True)).logsumexp(0).logsumexp(0).sum()
 
 def compute_aic(self):
 
