@@ -37,6 +37,15 @@ def plot_loss(model, figsize=(15,7)):
 
     return fig, axs
 
+# Plot proportion per kinetic state
+def plot_ratio(adata, ax=None):
+    state_ratio = adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes'].sum(1)/adata.shape[0]
+    state_ratio_args = np.argsort(-1*state_ratio)
+
+    sns.lineplot(x=state_ratio_args.astype(str), y=state_ratio[state_ratio_args], color='black', ax=ax)
+    sns.scatterplot(x=state_ratio_args.astype(str), y=state_ratio[state_ratio_args], color='black', ax=ax)
+    return ax
+
 # Dynamics report - summary 
 
 # Heatmap with latent state transition matrix
@@ -73,13 +82,13 @@ def plot_latent_transitions(adata, ax=None):
     return ax
 
 # Heatmap P(lineage/state)
-def plot_state_assignment(adata, states=None, ax=None):
+def plot_state_assignment(adata, states=None, prob_key='chain_given_state', ax=None):
 
     # Check if probs exist
-    try: assert 'chain_given_state' in adata.uns['latent_dynamics']['conditional_probabilities'].keys()
+    try: assert prob_key in adata.uns['latent_dynamics']['conditional_probabilities'].keys()
     except: raise ValueError('Conditionals not found. Run infer_latent_dynamics() first')
 
-    probs = adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_state']
+    probs = adata.uns['latent_dynamics']['conditional_probabilities'][prob_key]
     if states is None:
         states = np.arange(probs.shape[0])
 
@@ -107,10 +116,10 @@ def plot_latent_paths(adata, color='whitesmoke', basis='umap', ax=None):
         node_coordinates.loc[state] = np.mean(adata.obsm['X_{}'.format(basis)][np.where(adata.obs.kinetic_states==str(state))[0]],
                                           axis=0)
         sns.scatterplot(x=[node_coordinates.loc[state][0]], 
-                y=[node_coordinates.loc[state][1]],
-                s=500, #color=adata.uns['kinetic_states_colors'][state], 
-                edgecolors='none',
-                ax=ax)
+                        y=[node_coordinates.loc[state][1]],
+                        s=500, #color=adata.uns['kinetic_states_colors'][state], 
+                        edgecolors='none',
+                        ax=ax)
 
     color_range = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3",
                    "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD"]
@@ -142,17 +151,17 @@ def plot_annotation_boxplots(adata, categorical=None, continous=None, hue=None,
     return ax
 
 # Heatmap with overlap between annotation and kinetic states
-def plot_static_kinetic_overlap(adata, cluster_key: str, states=None, ax=None):
+def plot_static_kinetic_overlap(adata, cluster_key: str, prob_key='state_given_nodes', states=None, ax=None):
 
     # Check if probs exist
-    try: assert 'state_given_nodes' in adata.uns['latent_dynamics']['conditional_probabilities'].keys()
+    try: assert prob_key in adata.uns['latent_dynamics']['conditional_probabilities'].keys()
     except: raise ValueError('Conditionals not found. Run infer_latent_dynamics() first')
 
-    probs = adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes']
+    probs = adata.uns['latent_dynamics']['conditional_probabilities'][prob_key]
     if states is None:
         states = np.arange(probs.shape[0])
 
-    probs = pd.DataFrame(adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes'].T, 
+    probs = pd.DataFrame(adata.uns['latent_dynamics']['conditional_probabilities'][prob_key].T, 
                          index=adata.obs.index)
     probs = probs.loc[:, states]
     probs[cluster_key] = adata.obs[cluster_key]
@@ -178,6 +187,8 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
         try: assert 'selected_states' in adata.uns['latent_dynamics']['posthoc_computations'].keys()
         except: raise ValueError('No selected states. Run latent_state_selection() first')
         selected_states = adata.uns['latent_dynamics']['posthoc_computations']['selected_states']
+        plot_state_assignment_key = 'chain_given_state_selected'
+        plot_static_kinetic_overlap_key = 'state_given_nodes_selected'
     else:
         selected_states = None
 
@@ -190,7 +201,8 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
     plot_latent_transitions(adata, ax=axs.flat[1])
 
     # Chain weights
-    plot_state_assignment(adata, states=selected_states, ax=axs.flat[2])
+    plot_state_assignment(adata, states=selected_states, 
+                          prob_key=plot_state_assignment_key, ax=axs.flat[2])
 
     # Kinetic states UMAP
     scatter(adata, color='kinetic_states', legend_loc='on data', 
@@ -218,7 +230,8 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
     axs.flat[7].set_xticklabels(axs.flat[7].get_xticklabels(), rotation=rotation)
 
     # Kinetic annotation overlap
-    plot_static_kinetic_overlap(adata, cluster_key, states=selected_states, ax=axs.flat[8])
+    plot_static_kinetic_overlap(adata, cluster_key, states=selected_states, 
+                                prob_key=plot_static_kinetic_overlap_key, ax=axs.flat[8])
     axs.flat[8].set_xticklabels(axs.flat[8].get_xticklabels(), rotation=rotation)
 
     # Entropy on UMAP
@@ -258,12 +271,12 @@ def plot_latent_summary(adata, use_selected=True, ncols=4, basis='umap', figsize
         try: assert 'selected_states' in adata.uns['latent_dynamics']['posthoc_computations'].keys()
         except: raise ValueError('No selected states. Run latent_state_selection() first')
         selected_states = adata.uns['latent_dynamics']['posthoc_computations']['selected_states']
+        probs = adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes_selected']
     else:
         selected_states = np.arange(probs.shape[0])
 
-    probs = adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes']
     probs = probs[selected_states]
-    probs = probs/probs.sum(0)
+    #probs = probs/probs.sum(0)
 
     nrows = max(int(np.ceil((selected_states.shape[0]*2)/ncols)),1)
 
