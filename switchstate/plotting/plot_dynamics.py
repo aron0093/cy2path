@@ -374,6 +374,40 @@ def plot_lineages_summary(adata, cluster_key: str, use_selected=True,
         
     return fig, axs
 
+# Plot simulation
+def plot_simulation(adata, prob_key='state_history', color='whitesmoke', basis='umap', ax=None):
+    
+     # Check if state history exists
+    try: assert prob_key in adata.uns['state_probability_sampling'].keys()
+    except: raise ValueError('{} not found. Run sampling/dynamics first'.format(prob_key))
+    
+    probs = adata.uns['state_probability_sampling'][prob_key]
+    
+    scatter(adata, color=color, alpha=0.8, basis=basis, show=False, ax=ax)
+    
+    node_coordinates = pd.DataFrame(index=np.arange(probs.shape[0]), 
+                                    columns=np.arange(adata.obsm['X_{}'.format(basis)].shape[1]))
+    for step in node_coordinates.index.values:
+        node_coordinates.loc[step] = np.sum(np.multiply(probs[step].reshape(-1,1), 
+                                                         adata.obsm['X_{}'.format(basis)]),
+                                             axis=0)
+        sns.scatterplot(x=[node_coordinates.loc[step][0]], 
+                        y=[node_coordinates.loc[step][1]],
+                        s=100,
+                        color='black',
+                        edgecolors='none',
+                        ax=ax)
+        if step>0:
+            ax.arrow(node_coordinates.loc[step-1, 0],
+                     node_coordinates.loc[step-1, 1],
+                     node_coordinates.loc[step, 0] - node_coordinates.loc[step-1, 0],
+                     node_coordinates.loc[step, 1] - node_coordinates.loc[step-1, 1],
+                     length_includes_head=True, 
+                     color='black',
+                     head_width=0.2)
+        
+    return ax
+
 
 
 
