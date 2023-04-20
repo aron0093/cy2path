@@ -2,12 +2,12 @@ import time
 import torch
 from tqdm.auto import tqdm
 
-from ..utils import log_domain_mean   
+from ..utils import log_domain_mean
 from .methods import compute_log_likelihood   
 
 def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
-            optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, 
-            verbose=False):
+          optimizer=None, criterion=None, swa_scheduler=None, 
+          swa_start=200, verbose=False):
     
     '''
     Train the model.
@@ -58,8 +58,8 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
     try: assert self.regularisation_values
     except: self.regularisation_values = []
 
-    try: assert self.independence_values
-    except: self.independence_values = []
+    try: assert self.exclusivity_values
+    except: self.exclusivity_values = []
     
     self.optimizer = optimizer
     if self.optimizer is None:
@@ -87,17 +87,11 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         loss += self.sparsity_weight*sparsity
         self.sparsity_values.append(sparsity.item())
                         
-        # independence = (log_domain_mean(log_observed_state_probs_, 0).logsumexp(1) - \
-        #                 log_domain_mean(log_observed_state_probs_, 0).logsumexp(1).logsumexp(0)).sum(0).logsumexp(0)
-        
-        # independence = (log_domain_mean(log_observed_state_probs_, 0).logsumexp(0) - \
-        #                 log_domain_mean(log_observed_state_probs_, 0).logsumexp(0).logsumexp(0)).sum(0).logsumexp(0)
-
-        independence = log_domain_mean(log_observed_state_probs_, 0).logsumexp(1).sum(-1).logsumexp(0)
-        #independence = self.log_emission_matrix.logsumexp(1).sum(0).logsumexp(-1)
-        
-        loss -= 1/independence
-        self.independence_values.append(independence.item())
+        #exclusivity = log_domain_mean(log_observed_state_probs_, 0).logsumexp(0).sum(0).logsumexp(0)
+        exclusivity = self.criterion(torch.corrcoef(self.log_emission_matrix[:,0].exp()).log(),
+                                     torch.eye(self.num_states))
+        loss += exclusivity
+        self.exclusivity_values.append(exclusivity.item())
 
         if TPM is not None:
             regularisation = self.criterion(self.log_emission_matrix, 
@@ -118,7 +112,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
             outputs = torch.exp(prediction)
             for t in range(self.num_iters):
                 corrcoeffs.append(torch.corrcoef(torch.stack([outputs[t], D[t]]))[1,0])
-            avg_corrcoeff = torch.mean(torch.tensor(corrcoeffs))
+            self.avg_corrcoeff = torch.mean(torch.tensor(corrcoeffs)).item()
 
             # Print Loss
             if verbose:
@@ -130,8 +124,8 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                                                                 self.likelihood_values[-1],
                                                                                 self.sparsity_values[-1],
                                                                                 self.regularisation_values[-1],
-                                                                                self.independence_values[-1],
-                                                                                avg_corrcoeff))
+                                                                                self.exclusivity_values[-1],
+                                                                                self.avg_corrcoeff))
                 else:
                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Exl {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
@@ -139,7 +133,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                                                                 self.divergence_values[-1],
                                                                                 self.likelihood_values[-1],                                                    
                                                                                 self.sparsity_values[-1],
-                                                                                self.independence_values[-1],
-                                                                                avg_corrcoeff))
+                                                                                self.exclusivity_values[-1],
+                                                                                self.avg_corrcoeff))
             
         
