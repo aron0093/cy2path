@@ -47,7 +47,7 @@ def extract_model_outputs(adata, model):
                                                                                            dim=-1).cpu().detach().numpy()
     
     # Compute relevant conditionals
-    log_observed_state_probs_mean = log_domain_mean(log_observed_state_probs_)
+    log_observed_state_probs_mean = log_domain_mean(log_observed_state_probs_, use_gpu=model.is_cuda)
 
     adata.uns['latent_dynamics']['conditional_probabilities'] = {}
     adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes'] = exponentiate_detach(log_observed_state_probs_mean.logsumexp(1) -\

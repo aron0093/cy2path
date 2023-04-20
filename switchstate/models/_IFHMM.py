@@ -128,15 +128,18 @@ class IFHMM(torch.nn.Module):
         log_beta = torch.zeros(self.num_iters, self.num_states, self.num_chains)
         log_gamma = torch.zeros(self.num_iters, self.num_states, self.num_chains)
 
+        init = torch.tensor([1.0]*self.num_states).log()
+
         if self.is_cuda: 
             log_beta = log_beta.cuda()
             log_gamma = log_gamma.cuda()
             D = D.cuda()
+            init = init.cuda()
 
         # Initialise at iteration 0
         log_beta[-1] = (self.log_transition_matrix.unsqueeze(-1) + \
                        (D.log()[-1].unsqueeze(0).unsqueeze(0) + self.log_emission_matrix + \
-                       torch.tensor([1.0]*self.num_states).log().unsqueeze(-1).unsqueeze(-1)).logsumexp(-1).unsqueeze(0)).logsumexp(1)
+                       init.unsqueeze(-1).unsqueeze(-1)).logsumexp(-1).unsqueeze(0)).logsumexp(1)
         
         log_gamma[-1] = log_beta[-1] - log_probs.sum(0).unsqueeze(0) + log_alpha[-1] 
         

@@ -30,5 +30,5 @@ def compute_aic(self):
     
     compute_log_likelihood(self)
 
-    self.aic = 2*(self.num_params - self.log_likelihood).detach().numpy()
+    self.aic = 2*(self.num_params - self.log_likelihood).detach().cpu().numpy()
 
