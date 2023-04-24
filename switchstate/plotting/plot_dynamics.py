@@ -276,6 +276,7 @@ def plot_latent_summary(adata, use_selected=True, ncols=4, basis='umap', figsize
         selected_states = np.arange(probs.shape[0])
 
     probs = probs[selected_states]
+    membership = pd.get_dummies(probs.argmax(0))
     #probs = probs/probs.sum(0)
 
     nrows = max(int(np.ceil((selected_states.shape[0]*2)/ncols)),1)
@@ -294,9 +295,12 @@ def plot_latent_summary(adata, use_selected=True, ncols=4, basis='umap', figsize
                     basis=basis, vmin=0, vmax=1, ax=axs.flat[i], show=False)
             
             scatter(adata, color='silver', basis=basis, ax=axs.flat[i+1], show=False)
-            scatter(adata, color=pd.get_dummies(probs.argmax(0))[int(i/2)], color_map='binary', 
-                    title='Hidden state memb. {}'.format(selected_states[int(i/2)]), 
-                    basis=basis, ax=axs.flat[i+1], show=False)
+            if int(i/2) in membership.columns:
+                scatter(adata, color=membership[int(i/2)], color_map='binary', 
+                        title='Hidden state memb. {}'.format(selected_states[int(i/2)]), 
+                        basis=basis, ax=axs.flat[i+1], show=False)
+            else:
+                pass
 
     return fig, axs
 
@@ -345,13 +349,16 @@ def plot_lineages_summary(adata, cluster_key: str, use_selected=True,
     fig, axs = plt.subplots(ncols=4, nrows=num_chains, figsize=figsize)
 
     for i in range(num_chains):
+
+        adata.uns['state_probability_sampling']['state_history_chain_{}'.format(i)] = adata.uns['latent_dynamics']['model_outputs']['joint_probabilities'].sum(1)[:,i,:]
     
         # Plot lineage membership
         scatter(adata, color='silver', basis=basis, ax=axs.flat[i*4], show=False)
         scatter(adata, basis=basis, 
                        color=adata.obs.kinetic_states.isin(np.array(adata.uns['latent_dynamics']['posthoc_computations']['condensed_latent_paths'][i]).astype(str)),
                        title='Chain {} cell membership'.format(i), 
-                       color_map='binary', show=False, ax=axs.flat[i*4])
+                       color_map='binary', vmin=0, vmax=1, show=False, ax=axs.flat[i*4])
+        #plot_simulation(adata, prob_key='state_history_chain_{}'.format(i), color='whitesmoke', basis='umap', ax=axs.flat[i*4])
     
         # Plot lineage probabilities
         scatter(adata, color='silver', basis=basis, ax=axs.flat[i*4+1], show=False)
@@ -366,7 +373,6 @@ def plot_lineages_summary(adata, cluster_key: str, use_selected=True,
         axs.flat[i*4+2].set_title('Hidden state probabilities chain {}'.format(i)) 
 
         # Observed state probabilities
-        adata.uns['state_probability_sampling']['state_history_chain_{}'.format(i)] = adata.uns['latent_dynamics']['model_outputs']['joint_probabilities'].sum(1)[:,i,:]
         plot_probability_by_clusters(adata, cluster_key=cluster_key, 
                                      key='state_history_chain_{}'.format(i),
                                      ax=axs.flat[i*4+3])
@@ -382,6 +388,7 @@ def plot_simulation(adata, prob_key='state_history', color='whitesmoke', basis='
     except: raise ValueError('{} not found. Run sampling/dynamics first'.format(prob_key))
     
     probs = adata.uns['state_probability_sampling'][prob_key]
+    probs = (probs.T/probs.T.sum(0)).T
     
     scatter(adata, color=color, alpha=0.8, basis=basis, show=False, ax=ax)
     
