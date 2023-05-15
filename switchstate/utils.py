@@ -14,6 +14,7 @@ from scipy.sparse import issparse, csr_matrix
 
 import torch
 from torch.autograd import Function
+from torch.nn.utils.parametrizations import _make_orthogonal
 
 # Scale array to range
 def scale(X, min=0, max=1):
@@ -123,13 +124,15 @@ def log_domain_mean(tensor_, dim=0, use_gpu=False):
 
 # Generalised Jensen-Shannon divergence
 class JSDLoss(torch.nn.Module):
-    def __init__(self, reduction='batchmean'):
+    def __init__(self, reduction='sum', use_gpu=False):
         super().__init__()
         self.kl = torch.nn.KLDivLoss(reduction=reduction, log_target=True)
+        self.use_gpu = use_gpu
 
     def forward(self, tensor):
         weight = 1.0/tensor.shape[0]
-        centroid = log_domain_mean(tensor, dim=0)
+
+        centroid = log_domain_mean(tensor, dim=0, use_gpu=self.use_gpu)
 
         return weight * sum([self.kl(centroid, tensor[i]) for i in range(tensor.shape[0])])
 
@@ -148,4 +151,3 @@ class GradientReversal(Function):
             grad_input = - alpha*grad_output
         return grad_input, None
 revgrad = GradientReversal.apply
-
