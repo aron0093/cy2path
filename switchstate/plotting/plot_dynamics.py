@@ -26,11 +26,14 @@ def plot_loss(model, figsize=(15,7)):
     sns.lineplot(model.sparsity_values, ax=axs.flat[3])
     axs.flat[3].set_title('Sparsity regularisation')
 
-    if model.regularisation_values != []:
-        sns.lineplot(model.regularisation_values, ax=axs.flat[4])
-        axs.flat[4].set_title('TPM regularisation')
-    else:
-        axs.flat[4].axis('off')
+    # if model.regularisation_values != []:
+    #     sns.lineplot(model.regularisation_values, ax=axs.flat[4])
+    #     axs.flat[4].set_title('TPM regularisation')
+    # else:
+    #     axs.flat[4].axis('off')
+
+    sns.lineplot(model.orthogonality_values, ax=axs.flat[4])
+    axs.flat[4].set_title('Orthogonality regularisation')
 
     sns.lineplot(model.exclusivity_values, ax=axs.flat[5])
     axs.flat[5].set_title('Kinetic state exclusivity')
@@ -38,12 +41,28 @@ def plot_loss(model, figsize=(15,7)):
     return fig, axs
 
 # Plot proportion per kinetic state
-def plot_ratio(adata, ax=None):
-    state_ratio = adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes'].sum(1)/adata.shape[0]
+def plot_ratio(adata, probability=False,  ax=None):
+
+    if probability:
+        state_ratio = adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes'].sum(1)/adata.shape[0]
+    else:
+        state_ratio = np.empty(adata.uns['latent_dynamics']['latent_dynamics_params']['num_states'])
+        states, counts = np.unique(adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes'].argmax(0), 
+                                   return_counts=True)
+        
+        for i, state in enumerate(states):
+            state_ratio[state] = counts[i]
+        state_ratio = state_ratio/adata.shape[0]
     state_ratio_args = np.argsort(-1*state_ratio)
 
     sns.lineplot(x=state_ratio_args.astype(str), y=state_ratio[state_ratio_args], color='black', ax=ax)
     sns.scatterplot(x=state_ratio_args.astype(str), y=state_ratio[state_ratio_args], color='black', ax=ax)
+    if adata.uns['latent_dynamics']['latent_dynamics_params']['min_ratio']:
+        ax.hlines(adata.uns['latent_dynamics']['latent_dynamics_params']['min_ratio'], 0, 
+                  adata.uns['latent_dynamics']['latent_dynamics_params']['num_states']-1,
+                linestyle='dotted', color='red')
+
+    ax.set_ylim(0, max(state_ratio)+0.05)
     return ax
 
 # Dynamics report - summary 
@@ -76,7 +95,7 @@ def plot_latent_transitions(adata, ax=None):
     except: raise ValueError('Latent paths not found. Run infer_latent_paths() first')
 
     sns.lineplot(adata.uns['latent_dynamics']['posthoc_computations']['latent_paths'].astype(int), ax=ax) 
-    ax.set_title('Viterbi decoding per lineage')
+    ax.set_title('Latent path decoding per lineage')
     ax.set_yticks(np.unique(adata.uns['latent_dynamics']['posthoc_computations']['latent_paths'].astype(int)))
     
     return ax
@@ -117,7 +136,7 @@ def plot_latent_paths(adata, color='whitesmoke', basis='umap', ax=None):
                                           axis=0)
         sns.scatterplot(x=[node_coordinates.loc[state][0]], 
                         y=[node_coordinates.loc[state][1]],
-                        s=500, #color=adata.uns['kinetic_states_colors'][state], 
+                        s=500, #color=adata.uns['kinetic_states_colors'][adata.obs.kinetic_states.cat.categories.get_loc(state)], 
                         edgecolors='none',
                         ax=ax)
 
@@ -212,8 +231,9 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
     plot_latent_paths(adata, color='whitesmoke', basis=basis, ax=axs.flat[4])
     
     # Lineage on UMAP
-    scatter(adata, color='lineage', legend_loc='on data', 
-            basis=basis, alpha=0.8, show=False, ax=axs.flat[5])
+    #TODO: Not Implemented
+    # scatter(adata, color='lineage', legend_loc='on data', 
+    #         basis=basis, alpha=0.8, show=False, ax=axs.flat[5])
     
     # Kinetic states vs pst
     if 'pseudotime' not in adata.obs.columns:
