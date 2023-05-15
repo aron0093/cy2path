@@ -10,6 +10,10 @@ def log_transform_params(self):
     self.log_chain_weights = torch.nn.functional.log_softmax(self.unnormalized_chain_weights, dim=-1)
     
     # Normalise across chains for each state
+    # orthogonal_emission_matrix = torch.linalg.qr(self.unnormalized_emission_matrix.squeeze(1).transpose(1,0))[0]
+    # orthogonal_emission_matrix = orthogonal_emission_matrix.transpose(1,0).unsqueeze(1)
+
+    # self.log_emission_matrix = torch.nn.functional.log_softmax(orthogonal_emission_matrix, dim=-1)
     self.log_emission_matrix = torch.nn.functional.log_softmax(self.unnormalized_emission_matrix, dim=-1)
 
     # Normalise TPM so that they are probabilities (log space)
@@ -19,10 +23,9 @@ def compute_log_likelihood(self):
 
     prediction, log_observed_state_probs_, log_hidden_state_probs = self.forward_model()
 
-    self.log_likelihood = (log_domain_mean(log_observed_state_probs_, use_gpu=self.is_cuda) - \
-                           log_domain_mean(log_observed_state_probs_, use_gpu=self.is_cuda).logsumexp(0, 
-                                                                                                      keepdims=True).logsumexp(1, 
-                                                                                                      keepdims=True)).logsumexp(0).logsumexp(0).sum()
+    self.log_likelihood = log_domain_mean(log_domain_mean((log_observed_state_probs_ - \
+                           log_observed_state_probs_.logsumexp(-1, keepdims=True)).sum(0), 
+                           use_gpu=self.is_cuda), use_gpu=self.is_cuda).logsumexp(0)
 
 def compute_aic(self):
 
@@ -31,4 +34,7 @@ def compute_aic(self):
     compute_log_likelihood(self)
 
     self.aic = 2*(self.num_params - self.log_likelihood).detach().cpu().numpy()
+
+
+
 
