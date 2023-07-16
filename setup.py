@@ -8,10 +8,12 @@ setup(
   packages=find_packages(),
   install_requires=[
       'scvelo',
-      'imageio==2.19.3',
       'seaborn',
+      'scikit-learn>=1.3.0',
+      'imageio==2.19.3',
+      'tqdm',
       'hausdorff',
-      'networkit',
+      'dtaidistance',
       'torch',
       ],
   classifiers=[
