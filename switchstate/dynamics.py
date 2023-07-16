@@ -78,7 +78,7 @@ def compute_conditionals(adata, use_selected=True):
     adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes_selected'] = observed_state_probs_mean.sum(1) /\
                                                                                      observed_state_probs_mean.sum(1).sum(0)
     adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_nodes_selected'] = observed_state_probs_mean.sum(0) /\
-                                                                                     observed_state_probs_mean.sum(0).sum()
+                                                                                     observed_state_probs_mean.sum(0).sum(0) 
     adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_state_selected'] = (observed_state_probs_mean.sum(-1).T /\
                                                                                      observed_state_probs_mean.sum(-1).sum(1)).T
 
@@ -192,6 +192,7 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
 
     adata.uns['latent_dynamics']['latent_dynamics_params'] = locals()
     adata.uns['latent_dynamics']['aic'] = model.aic
+    adata.uns['latent_dynamics']['log_likelihood'] = model.log_likelihood.item()
 
     if save_model is not None:
         torch.save(model.state_dict(), save_model)
