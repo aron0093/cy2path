@@ -135,6 +135,32 @@ class JSDLoss(torch.nn.Module):
         centroid = log_domain_mean(tensor, dim=0, use_gpu=self.use_gpu)
 
         return weight * sum([self.kl(centroid, tensor[i]) for i in range(tensor.shape[0])])
+    
+# Mutual information from contingency
+class MI(torch.nn.Module):
+
+    def __init__(self, use_gpu=False):
+        super().__init__()
+        self.use_gpu = use_gpu
+
+    def forward(self, contingency_table):
+
+        # Compute the marginal probability distributions
+        marginal_x = contingency_table.sum(1)
+        marginal_y = contingency_table.sum(0)
+        
+        # Compute the mutual information
+        mutual_info = torch.Tensor([0])
+        if self.use_gpu:
+            mutual_info = mutual_info.cuda()
+
+        for i in range(contingency_table.shape[0]):
+            for j in range(contingency_table.shape[1]):
+                if contingency_table[i, j] > 0:
+                    mutual_info += contingency_table[i, j] * torch.log2(contingency_table[i, j] /
+                                                                    (marginal_x[i] * marginal_y[j]))
+        
+        return mutual_info[0]
 
 # Gradient reversal from https://github.com/tadeephuy/GradientReversal
 class GradientReversal(Function):
