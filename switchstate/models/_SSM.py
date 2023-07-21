@@ -24,8 +24,8 @@ class SSM(torch.nn.Module):
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
-    P(node/iter) = sigma_chain sigma_state P(node/state, chain, iter)P(chain/state, iter)P(state/iter)
-    P(state/iter) is parametarised as a HMM i.e. P(state_current/state_previous)
+    P(node/iter) = sigma_chain sigma_state P(node/chain, state, iter)P(chain/state, iter)P(state, iter)
+    P(state, iter) is parametarised as a HMM i.e. P(state_current/state_previous)
 
     '''
 
@@ -47,7 +47,7 @@ class SSM(torch.nn.Module):
                                                                         ))
 
         # Initialise emission matrix
-        # Enforce common state space
+        # Enforce common latent state space
         self.unnormalized_emission_matrix = torch.nn.Parameter(torch.randn(self.num_states,
                                                                            1, #self.num_chains
                                                                            self.num_nodes
@@ -197,7 +197,7 @@ class SSM(torch.nn.Module):
         return log_delta, psi, log_max, best_path
 
     # Train the model
-    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0, exclusivity_weight=1.0, orthogonality_weight='auto',
+    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0, exclusivity_weight=1.0, orthogonality_weight=1e-1,
               optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
         train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
               orthogonality_weight=orthogonality_weight, optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, 

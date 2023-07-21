@@ -24,8 +24,8 @@ class SSM_node(torch.nn.Module):
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
-    P(node/iter) = sigma_chain sigma_state P(chain/node, state, iter)P(node/state, iter)P(state/iter)
-    P(state/iter) is parametarised as a HMM i.e. P(state_current/state_previous)
+    P(node/iter) = sigma_chain sigma_state P(chain/node, state, iter)P(node/state, iter)P(state, iter)
+    P(state, iter) is parametarised as a HMM i.e. P(state_current/state_previous)
     '''
 
     def __init__(self, num_states, num_chains, num_nodes, num_iters, use_gpu=False):
@@ -41,12 +41,12 @@ class SSM_node(torch.nn.Module):
         self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states))
 
         # Intialise the weights of each node towards each chain
-        # Enforce common state space
         self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_nodes,
                                                                          self.num_chains,
                                                                         ))
 
         # Initialise emission matrix
+        # Enforce common latent state space
         self.unnormalized_emission_matrix = torch.nn.Parameter(torch.randn(self.num_states,
                                                                            self.num_nodes
                                                                           ))
@@ -193,7 +193,7 @@ class SSM_node(torch.nn.Module):
         return log_delta, psi, log_max, best_path
     
     # Train the model
-    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0, exclusivity_weight=1.0, orthogonality_weight='auto',
+    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0, exclusivity_weight=1.0, orthogonality_weight=1e-1,
               optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
         train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
               orthogonality_weight=orthogonality_weight, optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, 
