@@ -3,9 +3,13 @@ from setuptools import setup, find_packages
 setup(
   name='cy2path',
   version='0.0.1',
-  description='State probability simulations based trajectory inference.',
-  license='BSD 3-Clause License',
+  license='GNU General Public License v3 (GPLv3)',
+  description='Lineage inference with factorial latent dynamic models trained on Markovian simulations of biological processes using single cell RNA sequencing data.',
+  author = 'Revant Gupta',                   
+  author_email = 'revant.gupta.93@gmail.com',
   packages=find_packages(),
+  keywords = ['Lineage inference', 'single-cell RNA sequencing', 
+              'state space models', 'markov chain simulation'],
   install_requires=[
       'scvelo',
       'seaborn',
