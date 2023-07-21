@@ -14,8 +14,9 @@ def plot_loss(model, figsize=(15,7)):
 
     fig, axs = plt.subplots(ncols=3, nrows=2, figsize=figsize)
 
-    sns.lineplot(model.loss_values, ax=axs.flat[0])
-    axs.flat[0].set_title('Loss')
+    sns.lineplot(np.log(np.array(model.loss_values)+model.loss_values[-1]/10), 
+                 ax=axs.flat[0])
+    axs.flat[0].set_title('Log Loss')
 
     sns.lineplot(model.divergence_values, ax=axs.flat[1])
     axs.flat[1].set_title('KL divergence')
@@ -75,6 +76,7 @@ def plot_latent_transition_matrix(adata, states=None, ax=None):
     except: raise ValueError('Latent state TPM not found. Run infer_latent_dynamics() first')
 
     latent_transition_matrix = adata.uns['latent_dynamics']['model_params']['latent_transition_matrix']
+
     if states is None:
         states = np.arange(latent_transition_matrix.shape[0])
 
