@@ -131,7 +131,6 @@ class JSDLoss(torch.nn.Module):
 
     def forward(self, tensor):
         weight = 1.0/tensor.shape[0]
-
         centroid = log_domain_mean(tensor, dim=0, use_gpu=self.use_gpu)
 
         return weight * sum([self.kl(centroid, tensor[i]) for i in range(tensor.shape[0])])

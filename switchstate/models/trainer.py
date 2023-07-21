@@ -2,11 +2,11 @@ import time
 import torch
 from tqdm.auto import tqdm
 
-from ..utils import log_domain_mean, JSDLoss
+from ..utils import log_domain_mean, JSDLoss, MI, revgrad
 from .methods import compute_log_likelihood   
 
 def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
-          exclusivity_weight=1.0, orthogonality_weight='auto',
+          exclusivity_weight=1.0, orthogonality_weight=1e-1,
           optimizer=None, criterion=None, swa_scheduler=None, 
           swa_start=200, verbose=False):
     
@@ -23,7 +23,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         Number of training epochs
     sparsity_weight : float (default: 1.0)
         Regularisation weight for sparse latent TPM.
-    orthogonality_weight : float (default: 1e-2/D.shape[1])
+    orthogonality_weight : float (default: 1e-1)
         Regularisation weight for orthogonal EM.
     exclusivity_weight : float (default: 1.0)
         Regularisation weight for exclsuive lineages.
@@ -42,20 +42,17 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
     # Put tensors on correct device
     identity = torch.ones(self.num_states)
+    one = torch.tensor([1])
     if self.is_cuda:
         D = D.cuda()
         identity = identity.cuda()
+        one = one.cuda()
         if TPM is not None:
             TPM = TPM.cuda()
 
     # Store regularisation weights and losses     
     self.sparsity_weight = sparsity_weight
-
-    if orthogonality_weight=='auto':
-        self.orthogonality_weight = 1e+2/D.shape[1]
-    else:
-        self.orthogonality_weight = orthogonality_weight
-
+    self.orthogonality_weight = orthogonality_weight
     self.exclusivity_weight = exclusivity_weight
         
     try: assert self.elapsed_epochs
@@ -104,8 +101,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                              log_observed_state_probs_.logsumexp(1).logsumexp(-1, keepdims=True)
         
         # Sum up loss per chain
-        divergence = sum([self.criterion(log_observed_state_probs_per_chain[:,i], D) \
-                          for i in range(self.num_chains)]) # self.criterion(log_observed_state_probs_chain, D)
+        divergence = self.criterion(prediction, D)
         loss = divergence
         self.divergence_values.append(divergence.item())
 
@@ -121,25 +117,16 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         # Regularise latent states to be exclusive
         log_observed_state_probs_mean = log_domain_mean(log_observed_state_probs_, use_gpu=self.is_cuda)
 
-        log_state_given_nodes = log_observed_state_probs_mean.logsumexp(1) -\
+        log_nodes_given_state = log_observed_state_probs_mean.logsumexp(1) -\
                                 log_observed_state_probs_mean.logsumexp(1).logsumexp(-1, keepdims=True)
 
-        orthogonality = JSDLoss(use_gpu=self.is_cuda)(log_state_given_nodes)
-        #orthogonality = JSDLoss(use_gpu=self.is_cuda)(self.log_emission_matrix[:,0])
+        orthogonality = JSDLoss(use_gpu=self.is_cuda)(log_nodes_given_state)
         if self.num_states > 1:
             loss += self.orthogonality_weight*orthogonality
         self.orthogonality_values.append(orthogonality.item())
 
-        # Regularise chains to have independent node assignment
-        # log_chain_given_nodes = log_observed_state_probs_mean.logsumexp(0) -\
-        #                         log_observed_state_probs_mean.logsumexp(0).logsumexp(-1, keepdims=True)
-        
-        # exclusivity = 1/JSDLoss(use_gpu=self.is_cuda)(log_chain_given_nodes)
-
-        log_chain_given_states = log_observed_state_probs_mean.logsumexp(-1) -\
-                                 log_observed_state_probs_mean.logsumexp(-1).logsumexp(0, keepdims=True)
-        
-        exclusivity = 1/JSDLoss(use_gpu=self.is_cuda)(log_chain_given_states.transpose(1,0))
+        log_chain_states = log_observed_state_probs_mean.logsumexp(-1)
+        exclusivity = MI(use_gpu=self.is_cuda)(log_chain_states.exp())
 
         if self.num_chains > 1:
             loss += self.exclusivity_weight*exclusivity
@@ -147,8 +134,8 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
         # Regularise latent states to be consider neighborhood transitions using TPM
         if TPM is not None:
-            regularisation = self.criterion(log_state_given_nodes, 
-                                            torch.matmul(torch.exp(log_state_given_nodes.detach()), 
+            regularisation = self.criterion(log_nodes_given_state, 
+                                            torch.matmul(torch.exp(log_nodes_given_state.detach()), 
                                                          TPM))
             loss += regularisation
             self.regularisation_values.append(regularisation.item())
