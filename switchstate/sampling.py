@@ -52,13 +52,13 @@ def sample_state_probability(data, matrix_key='T_forward', recalc_matrix=False, 
 
     # Run analysis using copy of anndata if specified otherwise inplace
     adata = data.copy() if copy else data
-    check_TPM(adata, matrix_key='T_forward', recalc_matrix=recalc_matrix, self_transitions=self_transitions)
+    check_TPM(adata, matrix_key=matrix_key, recalc_matrix=recalc_matrix, self_transitions=self_transitions)
 
     # Initialise using root_cells, uniform or custom
     init_state_probability, init_type = check_root_init(adata, init=init)
    
     # Stationary state distribution
-    stationary_state_probability = estimate_stationary_state(adata, matrix_key='T_forward')
+    stationary_state_probability = estimate_stationary_state(adata, matrix_key=matrix_key)
 
     # Iterate state probabilities till convergence
     state_history, state_history_max_iter, convergence_check = iterate_state_probability(adata, matrix_key=matrix_key, 

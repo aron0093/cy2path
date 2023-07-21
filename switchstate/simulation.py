@@ -1,11 +1,9 @@
 import logging
 logging.basicConfig(level = logging.INFO)
-import collections
 import numpy as np
 import pandas as pd
 
 from scipy.spatial.distance import cosine
-from scipy.sparse import csr_matrix
 
 from .sampling import iterate_state_probability, check_convergence_criteria
 from .utils import check_TPM, check_root_init, estimate_stationary_state
@@ -68,13 +66,13 @@ def sample_markov_chains(data, matrix_key='T_forward', recalc_matrix=False, self
 
     # Run analysis using copy of anndata if specified otherwise inplace
     adata = data.copy() if copy else data
-    check_TPM(adata, matrix_key='T_forward', recalc_matrix=recalc_matrix, self_transitions=self_transitions)
+    check_TPM(adata, matrix_key=matrix_key, recalc_matrix=recalc_matrix, self_transitions=self_transitions)
 
     # Initialise using root_cells, uniform or custom
     init_state_probability, init_type = check_root_init(adata, init=init)
    
     # Stationary state distribution
-    stationary_state_probability = estimate_stationary_state(adata, matrix_key='T_forward')
+    stationary_state_probability = estimate_stationary_state(adata, matrix_key=matrix_key)
 
     # Create empty arrays for the simulation and sample random numbers for all samples and max steps
     state_transition_probabilities = np.empty((num_chains, max_iter-1), dtype=np.float32)

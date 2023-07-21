@@ -24,8 +24,8 @@ class SSM_node(torch.nn.Module):
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
-    P(node/iter) = sigma_chain sigma_state P(chain/node, state, iter)P(node/state, iter)P(state/iter)
-    P(state/iter) is parametarised as a HMM i.e. P(state_current/state_previous)
+    P(node/iter) = sigma_chain sigma_state P(chain/node, state, iter)P(node/state, iter)P(state, iter)
+    P(state, iter) is parametarised as a HMM i.e. P(state_current/state_previous)
     '''
 
     def __init__(self, num_states, num_chains, num_nodes, num_iters, use_gpu=False):
@@ -41,12 +41,12 @@ class SSM_node(torch.nn.Module):
         self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states))
 
         # Intialise the weights of each node towards each chain
-        # Enforce common state space
         self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_nodes,
                                                                          self.num_chains,
                                                                         ))
 
         # Initialise emission matrix
+        # Enforce common latent state space
         self.unnormalized_emission_matrix = torch.nn.Parameter(torch.randn(self.num_states,
                                                                            self.num_nodes
                                                                           ))
@@ -104,6 +104,7 @@ class SSM_node(torch.nn.Module):
         if self.is_cuda: 
             log_alpha = log_alpha.cuda()
             log_probs = log_probs.cuda()
+            D = D.cuda()
 
         # Initialise at iteration 0
         log_alpha[0] = (D.log()[0].unsqueeze(0).unsqueeze(-1) + self.log_weights + \
@@ -129,14 +130,18 @@ class SSM_node(torch.nn.Module):
         log_beta = torch.zeros(self.num_iters, self.num_states, self.num_chains)
         log_gamma = torch.zeros(self.num_iters, self.num_states, self.num_chains)
 
+        init = torch.tensor([1.0]*self.num_states).log()
+
         if self.is_cuda: 
             log_beta = log_beta.cuda()
             log_gamma = log_gamma.cuda()
+            D = D.cuda()
+            init = init.cuda()
 
         # Initialise at iteration 0
         log_beta[-1] = (self.log_transition_matrix.unsqueeze(-1) + \
                        (D.log()[-1].unsqueeze(0).unsqueeze(-1) + self.log_weights + \
-                       torch.tensor([1.0]*self.num_states).log().unsqueeze(-1).unsqueeze(-1)).logsumexp(1).unsqueeze(0)).logsumexp(1)
+                       init.unsqueeze(-1).unsqueeze(-1)).logsumexp(1).unsqueeze(0)).logsumexp(1)
         
         log_gamma[-1] = log_beta[-1] - log_probs.sum(0).unsqueeze(0) + log_alpha[-1] 
         
@@ -160,6 +165,7 @@ class SSM_node(torch.nn.Module):
         if self.is_cuda: 
             log_delta = log_delta.cuda()
             psi = psi.cuda()
+            D = D.cuda()
 
         log_delta[0] = (D.log()[0].unsqueeze(0).unsqueeze(-1) + self.log_weights + \
                         self.log_state_init.unsqueeze(-1).unsqueeze(-1)).logsumexp(1)
@@ -187,10 +193,9 @@ class SSM_node(torch.nn.Module):
         return log_delta, psi, log_max, best_path
     
     # Train the model
-    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
-              optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, 
-              verbose=False):
-        train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight,
-            optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, swa_start=swa_start, 
-            verbose=verbose)
+    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0, exclusivity_weight=1.0, orthogonality_weight=1e-1,
+              optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
+        train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
+              orthogonality_weight=orthogonality_weight, optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, 
+              swa_start=swa_start, verbose=verbose)
 

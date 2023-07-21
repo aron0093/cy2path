@@ -14,6 +14,7 @@ from scipy.sparse import issparse, csr_matrix
 
 import torch
 from torch.autograd import Function
+from torch.nn.utils.parametrizations import _make_orthogonal
 
 # Scale array to range
 def scale(X, min=0, max=1):
@@ -123,15 +124,42 @@ def log_domain_mean(tensor_, dim=0, use_gpu=False):
 
 # Generalised Jensen-Shannon divergence
 class JSDLoss(torch.nn.Module):
-    def __init__(self, reduction='batchmean'):
+    def __init__(self, reduction='sum', use_gpu=False):
         super().__init__()
         self.kl = torch.nn.KLDivLoss(reduction=reduction, log_target=True)
+        self.use_gpu = use_gpu
 
     def forward(self, tensor):
         weight = 1.0/tensor.shape[0]
-        centroid = log_domain_mean(tensor, dim=0)
+        centroid = log_domain_mean(tensor, dim=0, use_gpu=self.use_gpu)
 
         return weight * sum([self.kl(centroid, tensor[i]) for i in range(tensor.shape[0])])
+    
+# Mutual information from contingency
+class MI(torch.nn.Module):
+
+    def __init__(self, use_gpu=False):
+        super().__init__()
+        self.use_gpu = use_gpu
+
+    def forward(self, contingency_table):
+
+        # Compute the marginal probability distributions
+        marginal_x = contingency_table.sum(1)
+        marginal_y = contingency_table.sum(0)
+        
+        # Compute the mutual information
+        mutual_info = torch.Tensor([0])
+        if self.use_gpu:
+            mutual_info = mutual_info.cuda()
+
+        for i in range(contingency_table.shape[0]):
+            for j in range(contingency_table.shape[1]):
+                if contingency_table[i, j] > 0:
+                    mutual_info += contingency_table[i, j] * torch.log2(contingency_table[i, j] /
+                                                                    (marginal_x[i] * marginal_y[j]))
+        
+        return mutual_info[0]
 
 # Gradient reversal from https://github.com/tadeephuy/GradientReversal
 class GradientReversal(Function):
@@ -148,4 +176,3 @@ class GradientReversal(Function):
             grad_input = - alpha*grad_output
         return grad_input, None
 revgrad = GradientReversal.apply
-
