@@ -24,7 +24,6 @@ def extract_model_outputs(adata, model):
     log_delta, psi, log_max, best_path = model.viterbi(state_history)
 
     # Model outputs
-    adata.uns['latent_dynamics'] = {}
     adata.uns['latent_dynamics']['model_outputs'] = {}
 
     adata.uns['latent_dynamics']['model_outputs']['latent_state_history'] = exponentiate_detach(log_hidden_state_probs)
@@ -45,7 +44,13 @@ def extract_model_outputs(adata, model):
                                                                                   dim=-1).cpu().detach().numpy()
     adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'] = torch.nn.functional.softmax(model.unnormalized_transition_matrix, 
                                                                                            dim=-1).cpu().detach().numpy()
-    
+    if adata.uns['latent_dynamics']['latent_dynamics_params']['mode'] == 'IFHMM':
+        adata.uns['latent_dynamics']['model_params']['confitional_latent_transition_matrix'] = \
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix']
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'] *=  adata.uns['latent_dynamics']['model_params']['chain_weights'][:, None, None]
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'] = \
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'].sum(0)
+
     # Compute relevant conditionals
     log_observed_state_probs_mean = log_domain_mean(log_observed_state_probs_, use_gpu=model.is_cuda)
 
@@ -135,6 +140,8 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
                           save_model='./model', load_model=None, copy=False, **kwargs):
 
     adata = data.copy() if copy else data
+    params_ = locals()
+    del params_['data']
 
     # Check if state history exists
     try: state_history = adata.uns['state_probability_sampling']['state_history']
@@ -184,13 +191,15 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
     # Train the model
     loss = model.train(state_history, TPM=TPM, num_epochs=num_epochs, verbose=verbose, **kwargs)
     
+    # Save params
+    adata.uns['latent_dynamics'] = {}
+    adata.uns['latent_dynamics']['latent_dynamics_params'] = params_
+
     # Model outputs
     extract_model_outputs(adata, model)
-    
+
     # Compute Likelihood P(Data/Model)
     compute_aic(model)
-
-    adata.uns['latent_dynamics']['latent_dynamics_params'] = locals()
     adata.uns['latent_dynamics']['aic'] = model.aic
     adata.uns['latent_dynamics']['log_likelihood'] = model.log_likelihood.item()
 
