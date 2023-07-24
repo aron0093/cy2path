@@ -21,21 +21,24 @@ class SSM(torch.nn.Module):
         Number of observed states in the MSM simulation.
     num_iters : int
         Number of iterations of the MSM simulation.
+    restricted: Bool (default: False)
+        Condition emission matrix on chains.
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
-    P(node/iter) = sigma_chain sigma_state P(node/chain, state, iter)P(chain/state, iter)P(state, iter)
-    P(state, iter) is parametarised as a HMM i.e. P(state_current/state_previous)
+    P(node | iter) = sigma_chain sigma_state P(node | chain, state, iter)P(chain | state, iter)P(state | iter)
+    P(state | iter) is parametarised as a HMM i.e. P(state_current | state_previous)
 
     '''
 
-    def __init__(self, num_states, num_chains, num_nodes, num_iters, use_gpu=False):
+    def __init__(self, num_states, num_chains, num_nodes, num_iters, restricted=False, use_gpu=False):
 
         super().__init__()
         self.num_nodes = num_nodes
         self.num_chains = num_chains
         self.num_states = num_states
         self.num_iters = num_iters
+        self.restricted = restricted
         self.use_gpu = use_gpu
         
         # Initial probability of being in any given hidden state
@@ -47,11 +50,11 @@ class SSM(torch.nn.Module):
                                                                         ))
 
         # Initialise emission matrix
-        # Enforce common latent state space
-        self.unnormalized_emission_matrix = torch.nn.Parameter(torch.randn(self.num_states,
-                                                                           1, #self.num_chains
-                                                                           self.num_nodes
-                                                                          ))
+        if self.restricted:
+            em_init = torch.randn(self.num_states, 1, self.num_nodes)
+        else:
+            em_init = torch.randn(self.num_states, self.num_chains, self.num_nodes)           
+        self.unnormalized_emission_matrix = torch.nn.Parameter(em_init)
                 
         # Initialise transition probability matrix between hidden states
         self.unnormalized_transition_matrix = torch.nn.Parameter(torch.randn(self.num_states,

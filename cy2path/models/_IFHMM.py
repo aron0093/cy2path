@@ -24,8 +24,8 @@ class IFHMM(torch.nn.Module):
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
-    P(node/iter) = sigma_chain sigma_state P(node/state, chain, iter)P(state, iter/chain)P(chain)
-    P(state, iter) is parametarised as a HMM i.e. P(state_current/state_previous)
+    P(node | iter) = sigma_chain sigma_state P(node | state, chain, iter)P(state | chain, iter)P(chain | iter)
+    P(state | iter) is parametarised as a HMM i.e. P(state_current | state_previous)
 
     '''
     
@@ -42,12 +42,14 @@ class IFHMM(torch.nn.Module):
         self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states, self.num_chains))
 
         # Intialise the weights of each node towards each chain
-        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_chains))
+        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_chains,
+                                                                         # self.num_iters
+                                                                         ))
 
         # Initialise emission matrix
         # Enforce common latent state space
         self.unnormalized_emission_matrix = torch.nn.Parameter(torch.randn(self.num_states,
-                                                                           1, #self.num_chains
+                                                                           1, #self.num_chains,
                                                                            self.num_nodes
                                                                           ))
                 

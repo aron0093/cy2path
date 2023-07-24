@@ -135,8 +135,8 @@ def latent_state_selection(adata, states=None, criteria=None, min_ratio=None):
 
 # Fit the latent dynamic model
 def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epochs=100, 
-                          mode='SSM', regularise_TPM=True, use_gpu=False, verbose=False,
-                          precomputed_emissions=None, precomputed_transitions=None,
+                          mode='SSM', regularise_TPM=True, restricted=False, use_gpu=False, 
+                          verbose=False, precomputed_emissions=None, precomputed_transitions=None,
                           save_model='./model', load_model=None, copy=False, **kwargs):
 
     adata = data.copy() if copy else data
@@ -161,11 +161,11 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
     # Initialise the model
     if not model:
         if mode=='SSM':
-            model = SSM(num_states, num_chains, adata.shape[0], state_history.shape[0], use_gpu=use_gpu)
+            model = SSM(num_states, num_chains, adata.shape[0], state_history.shape[0], restricted=restricted, use_gpu=use_gpu)
         elif mode=='SSM_granular':
             model = SSM_node(num_states, num_chains, adata.shape[0], state_history.shape[0], use_gpu=use_gpu)
         elif mode=='IFHMM':
-            model = IFHMM(num_states, num_chains, adata.shape[0], state_history.shape[0], use_gpu=use_gpu)
+            model = IFHMM(num_states, num_chains, adata.shape[0], state_history.shape[0], restricted=restricted, use_gpu=use_gpu)
     else:
         num_states = model.num_states
         num_chains = model.num_chains

@@ -24,8 +24,8 @@ class SSM_node(torch.nn.Module):
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
-    P(node/iter) = sigma_chain sigma_state P(chain/node, state, iter)P(node/state, iter)P(state, iter)
-    P(state, iter) is parametarised as a HMM i.e. P(state_current/state_previous)
+    P(node | iter) = sigma_chain sigma_state P(chain | node, state, iter)P(node | state, iter)P(state | iter)
+    P(state | iter) is parametarised as a HMM i.e. P(state_current | state_previous)
     '''
 
     def __init__(self, num_states, num_chains, num_nodes, num_iters, use_gpu=False):

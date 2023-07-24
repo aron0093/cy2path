@@ -97,8 +97,6 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
         # Model output
         prediction, log_observed_state_probs_, log_hidden_state_probs = self.forward_model()
-        log_observed_state_probs_per_chain = log_observed_state_probs_.logsumexp(1) - \
-                                             log_observed_state_probs_.logsumexp(1).logsumexp(-1, keepdims=True)
         
         # Sum up loss per chain
         divergence = self.criterion(prediction, D)
@@ -119,14 +117,18 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
         log_nodes_given_state = log_observed_state_probs_mean.logsumexp(1) -\
                                 log_observed_state_probs_mean.logsumexp(1).logsumexp(-1, keepdims=True)
+        orthogonality = JSDLoss(use_gpu=self.is_cuda)(log_nodes_given_state)   
 
-        orthogonality = JSDLoss(use_gpu=self.is_cuda)(log_nodes_given_state)
         if self.num_states > 1:
             loss += self.orthogonality_weight*orthogonality
         self.orthogonality_values.append(orthogonality.item())
 
         log_chain_states = log_observed_state_probs_mean.logsumexp(-1)
-        exclusivity = MI(use_gpu=self.is_cuda)(log_chain_states.exp())
+        exclusivity = revgrad(MI(use_gpu=self.is_cuda)(log_chain_states.exp()), one)
+
+        # log_states_given_chain = log_observed_state_probs_mean.logsumexp(-1) -\
+        #                         log_observed_state_probs_mean.logsumexp(-1).logsumexp(0, keepdims=True)
+        # exclusivity = revgrad(JSDLoss(use_gpu=self.is_cuda)(log_states_given_chain.transpose(1,0)), one)
 
         if self.num_chains > 1:
             loss += self.exclusivity_weight*exclusivity
@@ -147,7 +149,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
             swa_scheduler.step()
         
         self.loss_values.append(loss.item())
-
+        
         # Print training summary
         self.elapsed_epochs += 1
         if epoch % 10 == 0 or epoch <=10:
