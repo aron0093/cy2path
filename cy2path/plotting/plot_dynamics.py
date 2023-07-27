@@ -36,8 +36,12 @@ def plot_loss(model, figsize=(15,7)):
     sns.lineplot(model.orthogonality_values, ax=axs.flat[4])
     axs.flat[4].set_title('Orthogonality regularisation')
 
-    sns.lineplot(model.exclusivity_values, ax=axs.flat[5])
-    axs.flat[5].set_title('Kinetic state exclusivity')
+    if model.num_chains > 1:
+        sns.lineplot(model.exclusivity_values, ax=axs.flat[5])
+        axs.flat[5].set_title('Kinetic state exclusivity')
+    else:
+        axs.flat[5].axis('off')
+
 
     return fig, axs
 
@@ -229,13 +233,12 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
     scatter(adata, color='kinetic_states', legend_loc='on data', 
             basis=basis, alpha=0.8, show=False, ax=axs.flat[3])
     
-    # Lineagepath on UMAP
-    plot_latent_paths(adata, color='whitesmoke', basis=basis, ax=axs.flat[4])
+    # Kinetic clustering UMAP
+    scatter(adata, color='kinetic_clustering', legend_loc='on data', 
+            basis=basis, alpha=0.8, show=False, ax=axs.flat[4])
     
-    # Lineage on UMAP
-    #TODO: Not Implemented
-    # scatter(adata, color='lineage', legend_loc='on data', 
-    #         basis=basis, alpha=0.8, show=False, ax=axs.flat[5])
+    # Lineagepath on UMAP
+    plot_latent_paths(adata, color='whitesmoke', basis=basis, ax=axs.flat[5])
     
     # Kinetic states vs pst
     if 'pseudotime' not in adata.obs.columns:
@@ -292,8 +295,10 @@ def plot_latent_summary(adata, use_selected=True, ncols=4, basis='umap', figsize
     if use_selected:
         try: assert 'selected_states' in adata.uns['latent_dynamics']['posthoc_computations'].keys()
         except: raise ValueError('No selected states. Run latent_state_selection() first')
+
         selected_states = adata.uns['latent_dynamics']['posthoc_computations']['selected_states']
         probs = adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes_selected']
+
     else:
         selected_states = np.arange(probs.shape[0])
 
@@ -377,7 +382,7 @@ def plot_lineages_summary(adata, cluster_key: str, use_selected=True,
         # Plot lineage membership
         scatter(adata, color='silver', basis=basis, ax=axs.flat[i*4], show=False)
         scatter(adata, basis=basis, 
-                       color=adata.obs.kinetic_states.isin(np.array(adata.uns['latent_dynamics']['posthoc_computations']['condensed_latent_paths'][i]).astype(str)),
+                       color=adata.obs.lineage_assignment==i,
                        title='Chain {} cell membership'.format(i), 
                        color_map='binary', vmin=0, vmax=1, show=False, ax=axs.flat[i*4])
         #plot_simulation(adata, prob_key='state_history_chain_{}'.format(i), color='whitesmoke', basis='umap', ax=axs.flat[i*4])
