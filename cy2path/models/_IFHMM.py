@@ -27,6 +27,10 @@ class IFHMM(torch.nn.Module):
         Toggle GPU use.
 
     P(node | iter) = sigma_chain sigma_state P(node | state, chain, iter)P(state | chain, iter)P(chain | iter)
+    
+    # Enforce common state space
+    P(node | iter) = sigma_chain sigma_state P(node | state, chain, iter)P(state | iter)
+
     P(state | iter) is parametarised as a HMM i.e. P(state_current | state_previous)
 
     '''
@@ -45,8 +49,8 @@ class IFHMM(torch.nn.Module):
         self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states, self.num_chains))
 
         # Intialise the weights of each node towards each chain
-        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_chains,
-                                                                         # self.num_iters
+        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(# self.num_iters,
+                                                                         self.num_chains,
                                                                          ))
 
         # Initialise emission matrix
@@ -57,7 +61,7 @@ class IFHMM(torch.nn.Module):
         self.unnormalized_emission_matrix = torch.nn.Parameter(em_init)
                 
         # Initialise conditional transition probability matrices between hidden states
-        self.unnormalized_transition_matrix = torch.nn.Parameter(torch.randn(self.num_chains,
+        self.unnormalized_transition_matrix = torch.nn.Parameter(torch.randn(# self.num_chains,
                                                                              self.num_states,
                                                                              self.num_states
                                                                             ))
@@ -70,8 +74,18 @@ class IFHMM(torch.nn.Module):
     def forward_model(self):
     
         log_transform_params(self)
-        self.log_transition_matrix_ = self.log_transition_matrix
-        self.log_transition_matrix = (self.log_transition_matrix_ + self.log_chain_weights.unsqueeze(-1).unsqueeze(-1)).logsumexp(0)
+        
+        # P(l/iter)
+        # self.log_transition_matrix = (self.log_transition_matrix_ + \
+        #                              log_domain_mean(self.log_chain_weights, 
+        #                                              use_gpu=self.is_cuda).unsqueeze(-1).unsqueeze(-1)).logsumexp(0) 
+
+        # P(s/l,iter)
+        # self.log_transition_matrix_ = self.log_transition_matrix
+        # self.log_transition_matrix = (self.log_transition_matrix_ + self.log_chain_weights.unsqueeze(-1).unsqueeze(-1)).logsumexp(0)
+
+        # P(s/iter) -> common state space
+        self.log_transition_matrix_ = self.log_transition_matrix.unsqueeze(0)
 
         # MSM iteration wise probability calculation
         log_hidden_state_probs = torch.zeros(self.num_iters, self.num_states, self.num_chains)
@@ -95,8 +109,14 @@ class IFHMM(torch.nn.Module):
                                            log_hidden_state_probs[t].unsqueeze(-1)
         
         # Joint probabilities
+
+        # P(l/iter)
+        # log_observed_state_probs_ = log_observed_state_probs_ + \
+        #                             self.log_chain_weights.unsqueeze(1).unsqueeze(-1)
+
         log_observed_state_probs_ = log_observed_state_probs_ + \
-                                    self.log_chain_weights.repeat(self.num_iters, 1).unsqueeze(1).unsqueeze(-1)
+                            self.log_chain_weights.repeat(self.num_iters, 1).unsqueeze(1).unsqueeze(-1)
+        
 
         # Combine lineages                            
         log_observed_state_probs = log_observed_state_probs_.logsumexp(1).logsumexp(1)

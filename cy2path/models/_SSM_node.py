@@ -28,22 +28,25 @@ class SSM_node(torch.nn.Module):
     P(state | iter) is parametarised as a HMM i.e. P(state_current | state_previous)
     '''
 
-    def __init__(self, num_states, num_chains, num_nodes, num_iters, use_gpu=False):
+    def __init__(self, num_states, num_chains, num_nodes, num_iters, restricted=False, use_gpu=False):
 
         super().__init__()
         self.num_nodes = num_nodes
         self.num_chains = num_chains
         self.num_states = num_states
         self.num_iters = num_iters
+        self.restricted = restricted
         self.use_gpu = use_gpu
         
         # Initial probability of being in any given hidden state
         self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states))
 
         # Intialise the weights of each node towards each chain
-        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_nodes,
-                                                                         self.num_chains,
-                                                                        ))
+        if self.restricted:
+            cw_init = torch.randn(1, self.num_nodes, self.num_chains)     
+        else:
+            cw_init = torch.randn(self.num_states, self.num_nodes, self.num_chains)     
+        self.unnormalized_chain_weights = torch.nn.Parameter(cw_init)
 
         # Initialise emission matrix
         # Enforce common latent state space
@@ -68,7 +71,7 @@ class SSM_node(torch.nn.Module):
         
         # Joint chain, node
         self.log_weights = self.log_emission_matrix.unsqueeze(-1) + \
-                           self.log_chain_weights.unsqueeze(0)
+                           self.log_chain_weights
 
         # MSM iteration wise probability calculation
         log_hidden_state_probs = torch.zeros(self.num_iters, self.num_states)
