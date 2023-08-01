@@ -6,9 +6,7 @@ import logging
 logging.basicConfig(level = logging.INFO)
 
 from .utils import check_TPM, log_domain_mean, exponentiate_detach
-from .models import IFHMM, SSM, SSM_node
-
-from .models.methods import compute_aic
+from .FHMM import IFHMM, SFHMM, NFHMM
 
 # Function to store model outputs in anndata
 def extract_model_outputs(adata, model):
@@ -44,6 +42,14 @@ def extract_model_outputs(adata, model):
                                                                                   dim=-1).cpu().detach().numpy()
     adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'] = torch.nn.functional.softmax(model.unnormalized_transition_matrix, 
                                                                                            dim=-1).cpu().detach().numpy()
+    
+    # TODO: Unify output for all model types
+    if adata.uns['latent_dynamics']['latent_dynamics_params']['mode'] == 'IFHMM':
+        adata.uns['latent_dynamics']['model_params']['conditional_latent_transition_matrix'] = \
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix']
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'] *=  adata.uns['latent_dynamics']['model_params']['chain_weights'].mean(0)[:, None, None]
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'] = \
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'].sum(0)
 
     # Compute relevant conditionals
     log_observed_state_probs_mean = log_domain_mean(log_observed_state_probs_, use_gpu=model.is_cuda)
@@ -132,8 +138,8 @@ def latent_state_selection(adata, states=None, criteria=None, min_ratio=None):
     compute_conditionals(adata, use_selected=True)
 
 # Fit the latent dynamic model
-def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epochs=100, 
-                          mode='SSM', regularise_TPM=True, restricted=False, use_gpu=False, 
+def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epochs=500, 
+                          mode='SFHMM', regularise_TPM=True, restricted=True, use_gpu=False, 
                           verbose=False, precomputed_emissions=None, precomputed_transitions=None,
                           save_model='./model', load_model=None, copy=False, **kwargs):
 
@@ -157,11 +163,11 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
         state_history = state_history.cuda()
 
     # Initialise the model
-    if not model:
-        if mode=='SSM':
-            model = SSM(num_states, num_chains, adata.shape[0], state_history.shape[0], restricted=restricted, use_gpu=use_gpu)
-        elif mode=='SSM_granular':
-            model = SSM_node(num_states, num_chains, adata.shape[0], state_history.shape[0], restricted=restricted, use_gpu=use_gpu)
+    if not model:          
+        if mode=='SFHMM':
+            model = SFHMM(num_states, num_chains, adata.shape[0], state_history.shape[0], restricted=restricted, use_gpu=use_gpu)
+        elif mode=='NFHMM':
+            model = NFHMM(num_states, num_chains, adata.shape[0], state_history.shape[0], restricted=restricted, use_gpu=use_gpu)
         elif mode=='IFHMM':
             model = IFHMM(num_states, num_chains, adata.shape[0], state_history.shape[0], restricted=restricted, use_gpu=use_gpu)
     else:
@@ -197,8 +203,6 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
     extract_model_outputs(adata, model)
 
     # Compute Likelihood P(Data/Model)
-    compute_aic(model)
-    adata.uns['latent_dynamics']['aic'] = model.aic
     adata.uns['latent_dynamics']['log_likelihood'] = model.log_likelihood.item()
 
     if save_model is not None:
@@ -239,9 +243,13 @@ def infer_kinetic_clusters(data, states=None, criteria=None, min_ratio=0.01, cop
                                       adata.obs.lineage_assignment.astype(str)
     adata.obs['kinetic_clustering'] = adata.obs['kinetic_clustering'].astype('category')
 
+    # Transitional entropy
     #TODO: Compute with renormed probabilities
-    adata.obs['cellular_entropy'] = entropy(adata.uns['latent_dynamics']['model_outputs']['joint_probabilities'][:, selected_states
+    adata.obs['transitional_entropy'] = entropy(adata.uns['latent_dynamics']['model_outputs']['joint_probabilities'][:, selected_states
                                                                                                                  ].mean(0)).sum(0)
+    
+    # Differentiation entropy
+    adata.obs['differentiation_entropy'] = entropy(adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_nodes_selected'])
     
     if copy: return adata
 

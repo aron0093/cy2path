@@ -119,20 +119,15 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                 log_observed_state_probs_mean.logsumexp(1).logsumexp(-1, keepdims=True)
         orthogonality = JSDLoss(use_gpu=self.is_cuda)(log_nodes_given_state)   
 
-        if self.num_states > 1:
-            loss += self.orthogonality_weight*orthogonality
+        loss += self.orthogonality_weight*orthogonality
         self.orthogonality_values.append(orthogonality.item())
 
         log_chain_states = log_observed_state_probs_mean.logsumexp(-1)
-        exclusivity = revgrad(MI(use_gpu=self.is_cuda)(log_chain_states.exp()), one)
-
-        # log_states_given_chain = log_observed_state_probs_mean.logsumexp(-1) -\
-        #                         log_observed_state_probs_mean.logsumexp(-1).logsumexp(0, keepdims=True)
-        # exclusivity = revgrad(JSDLoss(use_gpu=self.is_cuda)(log_states_given_chain.transpose(1,0)), one)
+        exclusivity = MI(use_gpu=self.is_cuda)(log_chain_states.exp())
 
         if self.num_chains > 1:
             loss += self.exclusivity_weight*exclusivity
-        self.exclusivity_values.append(exclusivity.item())
+            self.exclusivity_values.append(exclusivity.item())
 
         # Regularise latent states to be consider neighborhood transitions using TPM
         if TPM is not None:
@@ -161,7 +156,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
             # Print Loss
             if verbose:
-                if TPM is not None:
+                if TPM is not None and self.num_chains > 1:
                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Reg {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 self.loss_values[-1],
@@ -172,7 +167,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                                                                 self.exclusivity_values[-1],
                                                                                 self.regularisation_values[-1],
                                                                                 self.avg_corrcoeff))
-                else:
+                elif TPM is None and self.num_chains > 1:
                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 self.loss_values[-1],
@@ -182,5 +177,14 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                                                                 self.orthogonality_values[-1],
                                                                                 self.exclusivity_values[-1],
                                                                                 self.avg_corrcoeff))
+                else:
+                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
+                                                                                self.elapsed_epochs, 
+                                                                                self.loss_values[-1],
+                                                                                self.divergence_values[-1],
+                                                                                self.likelihood_values[-1],                                                    
+                                                                                self.sparsity_values[-1],
+                                                                                self.orthogonality_values[-1],
+                                                                                self.avg_corrcoeff))                   
             
         
