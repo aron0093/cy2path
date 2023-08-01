@@ -124,6 +124,23 @@ def plot_state_assignment(adata, states=None, prob_key='chain_given_state', ax=N
 
     return ax
 
+# Heatmap P(lineage/node)
+def plot_node_assignment(adata, prob_key='chain_given_nodes', ordering=None, ax=None):
+
+    # Check if probs exist
+    try: assert prob_key in adata.uns['latent_dynamics']['conditional_probabilities'].keys()
+    except: raise ValueError('Conditionals not found. Run infer_latent_dynamics() first')
+
+    probs = adata.uns['latent_dynamics']['conditional_probabilities'][prob_key]
+    if ordering is not None:
+        probs = probs[:, ordering]
+
+    sns.heatmap(probs.T, vmax=1, vmin=0, cmap='YlGnBu', ax=ax)
+    ax.set_yticklabels([])
+    ax.set_title('P(lineage/node)')
+
+    return ax
+
 # Plot latent lineages
 def plot_latent_paths(adata, color='whitesmoke', basis='umap', ax=None):
 
@@ -202,7 +219,7 @@ def plot_static_kinetic_overlap(adata, cluster_key: str, prob_key='state_given_n
 
 # Plot dynamics panel
 def plot_dynamics_summary(adata, cluster_key: str, use_selected=True, 
-                          basis='umap', rotation=90, figsize=(13,16)):
+                          basis='umap', rotation=90, figsize=(13,20)):
 
     # Check if cluster key exists
     if cluster_key not in adata.obs.columns:
@@ -212,12 +229,16 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
         try: assert 'selected_states' in adata.uns['latent_dynamics']['posthoc_computations'].keys()
         except: raise ValueError('No selected states. Run latent_state_selection() first')
         selected_states = adata.uns['latent_dynamics']['posthoc_computations']['selected_states']
-        plot_state_assignment_key = 'chain_given_state_selected'
+        plot_node_assignment_key = 'chain_given_nodes_selected'
         plot_static_kinetic_overlap_key = 'state_given_nodes_selected'
     else:
         selected_states = None
 
-    fig, axs = plt.subplots(ncols=3, nrows=4, figsize=figsize)
+    # Kinetic states vs pst
+    if 'pseudotime' not in adata.obs.columns:
+        infer_pseudotime(adata)
+
+    fig, axs = plt.subplots(ncols=3, nrows=5, figsize=figsize)
 
     # Latent TPM
     plot_latent_transition_matrix(adata, states=selected_states, ax=axs.flat[0])
@@ -226,8 +247,9 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
     plot_latent_transitions(adata, ax=axs.flat[1])
 
     # Chain weights
-    plot_state_assignment(adata, states=selected_states, 
-                          prob_key=plot_state_assignment_key, ax=axs.flat[2])
+    ordering = adata.obs.index.get_indexer(adata.obs['pseudotime'].sort_values().index.values)
+    plot_node_assignment(adata, prob_key=plot_node_assignment_key, 
+                         ordering=ordering, ax=axs.flat[2])
 
     # Kinetic states UMAP
     scatter(adata, color='kinetic_states', legend_loc='on data', 
@@ -239,10 +261,6 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
     
     # Lineagepath on UMAP
     plot_latent_paths(adata, color='whitesmoke', basis=basis, ax=axs.flat[5])
-    
-    # Kinetic states vs pst
-    if 'pseudotime' not in adata.obs.columns:
-        infer_pseudotime(adata)
 
     order=adata.obs.groupby("kinetic_states")["pseudotime"].mean().fillna(0).sort_values().index
     plot_annotation_boxplots(adata, categorical='kinetic_states', continous='pseudotime',
@@ -259,25 +277,45 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
                                 prob_key=plot_static_kinetic_overlap_key, ax=axs.flat[8])
     axs.flat[8].set_xticklabels(axs.flat[8].get_xticklabels(), rotation=rotation)
 
-    # Entropy on UMAP
-    scatter(adata, color='cellular_entropy', legend_loc='on data', 
+    # Transitional Entropy on UMAP
+    scatter(adata, color='transitional_entropy', legend_loc='on data', 
             basis=basis, alpha=0.8, show=False, ax=axs.flat[9])
 
-    # Entropy per annotation
-    plot_annotation_boxplots(adata, categorical=cluster_key, continous='cellular_entropy',
+    # Transitional Entropy per annotation
+    plot_annotation_boxplots(adata, categorical=cluster_key, continous='transitional_entropy',
                              order=order, color='salmon', ax=axs.flat[10])
     axs.flat[10].set_xticklabels(axs.flat[10].get_xticklabels(), rotation=rotation)
 
-    # Annotation, kinetic entropy overlap
-    entropy_df = adata.obs.groupby(['kinetic_states', cluster_key]).sum().reset_index()
-    entropy_df = entropy_df.pivot(index='kinetic_states', columns=cluster_key, 
-                                  values='cellular_entropy').astype(float).round(2)
-    entropy_df = entropy_df.divide(adata.obs.groupby(cluster_key).count().cellular_entropy, axis=1)
+    # Annotation, kinetic transitional entropy overlap
+    t_entropy_df = adata.obs.groupby(['kinetic_states', cluster_key]).sum().reset_index()
+    t_entropy_df = t_entropy_df.pivot(index='kinetic_states', columns=cluster_key, 
+                                  values='transitional_entropy').astype(float).round(2)
+    t_entropy_df = t_entropy_df.divide(adata.obs.groupby(cluster_key).count().transitional_entropy, axis=1)
 
-    sns.heatmap(entropy_df, 
+    sns.heatmap(t_entropy_df, 
                 cmap='YlGnBu', annot=True, 
                 ax=axs.flat[11])
-    axs.flat[11].set_title('Entropy of annotation per states')
+    axs.flat[11].set_title(' Trans. Entropy of annot. per states')
+
+    # Differentiation Entropy on UMAP
+    scatter(adata, color='differentiation_entropy', legend_loc='on data', 
+            basis=basis, alpha=0.8, show=False, ax=axs.flat[12])
+
+    # Differentiation Entropy per annotation
+    plot_annotation_boxplots(adata, categorical=cluster_key, continous='differentiation_entropy',
+                             order=order, color='salmon', ax=axs.flat[13])
+    axs.flat[13].set_xticklabels(axs.flat[13].get_xticklabels(), rotation=rotation)
+
+    # Annotation, kinetic differentiation entropy overlap
+    d_entropy_df = adata.obs.groupby(['kinetic_states', cluster_key]).sum().reset_index()
+    d_entropy_df = d_entropy_df.pivot(index='kinetic_states', columns=cluster_key, 
+                                      values='differentiation_entropy').astype(float).round(2)
+    d_entropy_df = d_entropy_df.divide(adata.obs.groupby(cluster_key).count().differentiation_entropy, axis=1)
+
+    sns.heatmap(d_entropy_df, 
+                cmap='YlGnBu', annot=True, 
+                ax=axs.flat[14])
+    axs.flat[14].set_title(' Diff. Entropy of annot. per states')
 
     return fig, axs 
 
