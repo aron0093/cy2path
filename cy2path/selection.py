@@ -13,7 +13,8 @@ from .dynamics import *
 def run_search(adata, regularise_TPM=False, use_gpu=True, verbose=False,
                param_list={'num_states': None, 'num_chains': None, 
                            'num_epochs': None, 'sparsity_weight': None, 
-                           'exclusivity_weight': None, 'orthogonality_weight': None}, 
+                           'exclusivity_weight': None, 'orthogonality_weight': None,
+                           'mode': None}, 
                outfil='gridsearch', **kwargs):
         
     # Construct return df
@@ -30,6 +31,8 @@ def run_search(adata, regularise_TPM=False, use_gpu=True, verbose=False,
             init_params['num_states'] = fit_values.loc[idx, 'num_states']
         if 'num_chains' in fit_values.columns:
             init_params['num_chains'] = fit_values.loc[idx, 'num_chains']
+        if 'mode' in fit_values.columns:
+            init_params['mode'] = fit_values.loc[idx, 'mode']
 
         # Parameters to pass at model training
         train_params = {'num_epochs': None,
@@ -50,6 +53,7 @@ def run_search(adata, regularise_TPM=False, use_gpu=True, verbose=False,
                                               num_states=fit_values.loc[idx, 'num_states'],
                                               num_chains=fit_values.loc[idx, 'num_chains'],
                                               num_epochs=fit_values.loc[idx, 'num_epochs'],
+                                              mode=fit_values.loc[idx, 'mode'],
                                               sparsity_weight=fit_values.loc[idx, 'sparsity_weight'],
                                               orthogonality_weight=fit_values.loc[idx, 'orthogonality_weight'],
                                               exclusivity_weight=fit_values.loc[idx, 'exclusivity_weight'],
