@@ -122,8 +122,9 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         loss += self.orthogonality_weight*orthogonality
         self.orthogonality_values.append(orthogonality.item())
 
-        log_chain_states = log_observed_state_probs_mean.logsumexp(-1)
-        exclusivity = MI(use_gpu=self.is_cuda)(log_chain_states.exp())
+        # TODO: Use static clustering as proxy to improve runtime? or subsample cells?
+        log_chain_nodes = log_observed_state_probs_mean.logsumexp(0)
+        exclusivity = revgrad(MI(use_gpu=self.is_cuda)(log_chain_nodes.exp()), one)
 
         if self.num_chains > 1:
             loss += self.exclusivity_weight*exclusivity

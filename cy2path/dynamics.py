@@ -6,7 +6,7 @@ import logging
 logging.basicConfig(level = logging.INFO)
 
 from .utils import check_TPM, log_domain_mean, exponentiate_detach
-from .FHMM import IFHMM, SFHMM, NFHMM
+from ._FHMM import IFHMM, SFHMM, NFHMM
 
 # Function to store model outputs in anndata
 def extract_model_outputs(adata, model):

@@ -10,4 +10,4 @@ from .fate import infer_fate_distribution, infer_fate_distribution_macrostates, 
 from .analytical import *
 
 from .plotting import *
-from .FHMM import *
+from ._FHMM import *
