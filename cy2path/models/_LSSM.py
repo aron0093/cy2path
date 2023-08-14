@@ -3,7 +3,7 @@ import torch
 from .methods import log_transform_params
 from .trainer import train
 
-class SFHMM(torch.nn.Module):
+class LSSM(torch.nn.Module):
     
     ''' 
     Latent dynamic model with a common latent state space 
@@ -200,7 +200,7 @@ class SFHMM(torch.nn.Module):
         return log_delta, psi, log_max, best_path
 
     # Train the model
-    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0, exclusivity_weight=1.0, orthogonality_weight=1e-1,
+    def train(self, D, TPM=None, num_epochs=500, sparsity_weight=1.0, exclusivity_weight=0.0, orthogonality_weight=1e-1,
               optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
         train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
               orthogonality_weight=orthogonality_weight, optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, 

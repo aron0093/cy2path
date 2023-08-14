@@ -142,7 +142,7 @@ def plot_node_assignment(adata, prob_key='chain_given_nodes', ordering=None, ax=
     return ax
 
 # Plot latent lineages
-def plot_latent_paths(adata, color='whitesmoke', basis='umap', ax=None):
+def plot_latent_paths(adata, color='whitesmoke', mode='clusters', basis='umap', ax=None):
 
     # Check if latent path exists
     try: assert 'condensed_latent_paths' in adata.uns['latent_dynamics']['posthoc_computations'].keys()
@@ -152,20 +152,26 @@ def plot_latent_paths(adata, color='whitesmoke', basis='umap', ax=None):
     
     scatter(adata, color=color, alpha=0.8, basis=basis, show=False, ax=ax)
     
-    states = np.unique(np.concatenate(list(lineage_paths.values())))
-    node_coordinates = pd.DataFrame(index=states, columns=np.arange(adata.obsm['X_{}'.format(basis)].shape[1]))
-    for state in states:
-        node_coordinates.loc[state] = np.mean(adata.obsm['X_{}'.format(basis)][np.where(adata.obs.kinetic_states==str(state))[0]],
-                                          axis=0)
-        sns.scatterplot(x=[node_coordinates.loc[state][0]], 
+    color_range = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3",
+                   "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD"]
+    for lineage, path in lineage_paths.items():
+
+        node_coordinates = pd.DataFrame(index=path, columns=np.arange(adata.obsm['X_{}'.format(basis)].shape[1]))
+        for state in path:
+            if mode=='clusters':
+                # Chain specific weight of nodes to calculate coords
+                state_probs = adata.uns['latent_dynamics']['conditional_probabilities']['node_given_chain_state_selected'][state, lineage]   
+            elif mode=='states':
+                # Overall coordinate of state
+                state_probs = adata.uns['latent_dynamics']['conditional_probabilities']['node_given_state_selected'][state]
+
+            node_coordinates.loc[state] = np.sum(np.multiply(state_probs.reshape(-1,1), adata.obsm['X_{}'.format(basis)]), axis=0)
+            sns.scatterplot(x=[node_coordinates.loc[state][0]], 
                         y=[node_coordinates.loc[state][1]],
                         s=500, #color=adata.uns['kinetic_states_colors'][adata.obs.kinetic_states.cat.categories.get_loc(state)], 
                         edgecolors='none',
                         ax=ax)
 
-    color_range = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B3",
-                   "#937860", "#DA8BC3", "#8C8C8C", "#CCB974", "#64B5CD"]
-    for lineage, path in lineage_paths.items():
         for step in range(len(path)-1):
             ax.arrow(node_coordinates.loc[path[step], 0],
                      node_coordinates.loc[path[step], 1],
@@ -230,6 +236,7 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
         except: raise ValueError('No selected states. Run latent_state_selection() first')
         selected_states = adata.uns['latent_dynamics']['posthoc_computations']['selected_states']
         plot_node_assignment_key = 'chain_given_nodes_selected'
+        plot_state_assignment_key = 'chain_given_state_selected'
         plot_static_kinetic_overlap_key = 'state_given_nodes_selected'
     else:
         selected_states = None
@@ -247,9 +254,11 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
     plot_latent_transitions(adata, ax=axs.flat[1])
 
     # Chain weights
-    ordering = adata.obs.index.get_indexer(adata.obs['pseudotime'].sort_values().index.values)
-    plot_node_assignment(adata, prob_key=plot_node_assignment_key, 
-                         ordering=ordering, ax=axs.flat[2])
+    # ordering = adata.obs.index.get_indexer(adata.obs['pseudotime'].sort_values().index.values)
+    # plot_node_assignment(adata, prob_key=plot_node_assignment_key, 
+    #                      ordering=ordering, ax=axs.flat[2])
+    plot_state_assignment(adata, prob_key=plot_state_assignment_key, 
+                          states=selected_states, ax=axs.flat[2])
 
     # Kinetic states UMAP
     scatter(adata, color='kinetic_states', legend_loc='on data', 

@@ -6,7 +6,7 @@ from ..utils import log_domain_mean, JSDLoss, MI, revgrad
 from .methods import compute_log_likelihood   
 
 def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
-          exclusivity_weight=1.0, orthogonality_weight=1e-1,
+          exclusivity_weight=0.0, orthogonality_weight=0.0,
           optimizer=None, criterion=None, swa_scheduler=None, 
           swa_start=200, verbose=False):
     
@@ -23,9 +23,9 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         Number of training epochs
     sparsity_weight : float (default: 1.0)
         Regularisation weight for sparse latent TPM.
-    orthogonality_weight : float (default: 1e-1)
+    orthogonality_weight : float (default: 0.0)
         Regularisation weight for orthogonal EM.
-    exclusivity_weight : float (default: 1.0)
+    exclusivity_weight : float (default: 0.0)
         Regularisation weight for exclsuive lineages.
     optimizer : (default: RMSProp(lr=0.2))
         Optimizer algorithm.
@@ -122,11 +122,16 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         loss += self.orthogonality_weight*orthogonality
         self.orthogonality_values.append(orthogonality.item())
 
-        # TODO: Use static clustering as proxy to improve runtime? or subsample cells?
-        log_chain_nodes = log_observed_state_probs_mean.logsumexp(0)
-        exclusivity = revgrad(MI(use_gpu=self.is_cuda)(log_chain_nodes.exp()), one)
-
         if self.num_chains > 1:
+
+            # log_chain_states = log_observed_state_probs_mean.logsumexp(-1)
+            # exclusivity = MI(use_gpu=self.is_cuda)(log_chain_states.exp())
+
+            log_chain_nodes = log_observed_state_probs_mean.logsumexp(0)
+
+            exclusivity = torch.sum(torch.triu(torch.abs(torch.corrcoef(log_chain_nodes.exp())), 1))
+            exclusivity /= self.num_chains*(self.num_chains-1)/2
+
             loss += self.exclusivity_weight*exclusivity
             self.exclusivity_values.append(exclusivity.item())
 
@@ -148,7 +153,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         
         # Print training summary
         self.elapsed_epochs += 1
-        if epoch % 10 == 0 or epoch <=10:
+        if epoch % 100 == 99 or epoch <=10:
             corrcoeffs = []
             outputs = torch.exp(prediction)
             for t in range(self.num_iters):

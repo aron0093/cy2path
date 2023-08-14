@@ -5,11 +5,11 @@ from .trainer import train
 
 from ..utils import log_domain_mean
 
-class IFHMM(torch.nn.Module):
+class FHMM(torch.nn.Module):
     
     ''' 
     Latent dynamic model with a common latent state space 
-    and conditional state transitions per chaon trained on 
+    and conditional state transitions per chain trained on 
     a Markov state simulation of an observed state TPM
     with SGD.
     
@@ -47,7 +47,7 @@ class IFHMM(torch.nn.Module):
         self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states, self.num_chains))
 
         # Intialise the weights of each node towards each chain
-        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_iters,
+        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(
                                                                          self.num_chains,
                                                                          ))
 
@@ -74,12 +74,12 @@ class IFHMM(torch.nn.Module):
         log_transform_params(self)
         self.log_transition_matrix_ = self.log_transition_matrix
 
-        # P(l/iter)
-        self.log_transition_matrix = (self.log_transition_matrix_ + \
-                                     log_domain_mean(self.log_chain_weights, use_gpu=self.is_cuda).unsqueeze(-1).unsqueeze(-1)).logsumexp(0) 
+        # # P(l/iter)
+        # self.log_transition_matrix = (self.log_transition_matrix_ + \
+        #                              log_domain_mean(self.log_chain_weights, use_gpu=self.is_cuda).unsqueeze(-1).unsqueeze(-1)).logsumexp(0) 
 
         # P(l)
-        # self.log_transition_matrix = (self.log_transition_matrix_ + self.log_chain_weights.unsqueeze(-1).unsqueeze(-1)).logsumexp(0)
+        self.log_transition_matrix = (self.log_transition_matrix_ + self.log_chain_weights.unsqueeze(-1).unsqueeze(-1)).logsumexp(0)
 
         # MSM iteration wise probability calculation
         log_hidden_state_probs = torch.zeros(self.num_iters, self.num_states, self.num_chains)
@@ -105,12 +105,12 @@ class IFHMM(torch.nn.Module):
         # Joint probabilities
 
         # P(l/iter)
-        log_observed_state_probs_ = log_observed_state_probs_ + \
-                                    self.log_chain_weights.unsqueeze(1).unsqueeze(-1)
+        # log_observed_state_probs_ = log_observed_state_probs_ + \
+        #                             self.log_chain_weights.unsqueeze(1).unsqueeze(-1)
 
         # P(l)
-        # log_observed_state_probs_ = log_observed_state_probs_ + \
-        #                     self.log_chain_weights.repeat(self.num_iters, 1).unsqueeze(1).unsqueeze(-1)
+        log_observed_state_probs_ = log_observed_state_probs_ + \
+                            self.log_chain_weights.repeat(self.num_iters, 1).unsqueeze(1).unsqueeze(-1)
 
         # Combine lineages                            
         log_observed_state_probs = log_observed_state_probs_.logsumexp(1).logsumexp(1)
@@ -217,7 +217,7 @@ class IFHMM(torch.nn.Module):
     
 
     # Train the model
-    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0, exclusivity_weight=1.0, orthogonality_weight=1e-1,
+    def train(self, D, TPM=None, num_epochs=500, sparsity_weight=1.0, exclusivity_weight=0.0, orthogonality_weight=1e-1,
               optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
         train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
               orthogonality_weight=orthogonality_weight, optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, 
