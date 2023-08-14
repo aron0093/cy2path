@@ -20,7 +20,8 @@ setup(
       'dtaidistance',
       'torch',
       'numpy==1.23.5', # scvelo errors
-      'pandas==1.3.5' # scvelo errors
+      'pandas==1.3.5', # scvelo errors
+      'matplotlib==3.3.4' # scvelo errors
       ],
   classifiers=[
     'Development Status :: 3 - Alpha',
