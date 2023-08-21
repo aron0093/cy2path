@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
   name='cy2path',
-  version='0.0.1',
+  version='0.0.2',
   license='GNU General Public License v3 (GPLv3)',
   description='Lineage inference with factorial latent dynamic models trained on Markovian simulations of biological processes using single cell RNA sequencing data.',
   author = 'Revant Gupta',                   
