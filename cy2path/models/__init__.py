@@ -1,3 +1,3 @@
-from ._IFHMM import IFHMM
-from ._SSM import SSM
-from ._SSM_node import SSM_node
+from ._FHMM import FHMM
+from ._LSSM import LSSM
+from ._NSSM import NSSM

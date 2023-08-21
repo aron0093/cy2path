@@ -6,7 +6,7 @@ from ..utils import log_domain_mean, JSDLoss, MI, revgrad
 from .methods import compute_log_likelihood   
 
 def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
-          exclusivity_weight=1.0, orthogonality_weight=1e-1,
+          exclusivity_weight=0.0, orthogonality_weight=0.0,
           optimizer=None, criterion=None, swa_scheduler=None, 
           swa_start=200, verbose=False):
     
@@ -23,9 +23,9 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         Number of training epochs
     sparsity_weight : float (default: 1.0)
         Regularisation weight for sparse latent TPM.
-    orthogonality_weight : float (default: 1e-1)
+    orthogonality_weight : float (default: 0.0)
         Regularisation weight for orthogonal EM.
-    exclusivity_weight : float (default: 1.0)
+    exclusivity_weight : float (default: 0.0)
         Regularisation weight for exclsuive lineages.
     optimizer : (default: RMSProp(lr=0.2))
         Optimizer algorithm.
@@ -97,8 +97,6 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
         # Model output
         prediction, log_observed_state_probs_, log_hidden_state_probs = self.forward_model()
-        log_observed_state_probs_per_chain = log_observed_state_probs_.logsumexp(1) - \
-                                             log_observed_state_probs_.logsumexp(1).logsumexp(-1, keepdims=True)
         
         # Sum up loss per chain
         divergence = self.criterion(prediction, D)
@@ -119,18 +117,26 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
         log_nodes_given_state = log_observed_state_probs_mean.logsumexp(1) -\
                                 log_observed_state_probs_mean.logsumexp(1).logsumexp(-1, keepdims=True)
+        orthogonality = JSDLoss(use_gpu=self.is_cuda)(log_nodes_given_state)   
 
-        orthogonality = JSDLoss(use_gpu=self.is_cuda)(log_nodes_given_state)
-        if self.num_states > 1:
-            loss += self.orthogonality_weight*orthogonality
+        loss += self.orthogonality_weight*orthogonality
         self.orthogonality_values.append(orthogonality.item())
 
-        log_chain_states = log_observed_state_probs_mean.logsumexp(-1)
-        exclusivity = MI(use_gpu=self.is_cuda)(log_chain_states.exp())
-
         if self.num_chains > 1:
+
+            # log_chain_states = log_observed_state_probs_mean.logsumexp(-1)
+            # exclusivity = MI(use_gpu=self.is_cuda)(log_chain_states.exp())
+
+            # log_chain_nodes = log_observed_state_probs_mean.logsumexp(0)
+            # exclusivity = torch.sum(torch.triu(torch.abs(torch.corrcoef(log_chain_nodes.exp())), 1))
+            # exclusivity /= self.num_chains*(self.num_chains-1)/2
+
+            log_states_given_chain = log_observed_state_probs_mean.logsumexp(-1) -\
+                                     log_observed_state_probs_mean.logsumexp(-1).logsumexp(0, keepdims=True)
+            exclusivity = revgrad(JSDLoss(use_gpu=self.is_cuda)(log_states_given_chain), one)
+
             loss += self.exclusivity_weight*exclusivity
-        self.exclusivity_values.append(exclusivity.item())
+            self.exclusivity_values.append(exclusivity.item())
 
         # Regularise latent states to be consider neighborhood transitions using TPM
         if TPM is not None:
@@ -147,10 +153,10 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
             swa_scheduler.step()
         
         self.loss_values.append(loss.item())
-
+        
         # Print training summary
         self.elapsed_epochs += 1
-        if epoch % 10 == 0 or epoch <=10:
+        if epoch % 100 == 99 or epoch <=9:
             corrcoeffs = []
             outputs = torch.exp(prediction)
             for t in range(self.num_iters):
@@ -159,7 +165,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
             # Print Loss
             if verbose:
-                if TPM is not None:
+                if TPM is not None and self.num_chains > 1:
                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Reg {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 self.loss_values[-1],
@@ -170,7 +176,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                                                                 self.exclusivity_values[-1],
                                                                                 self.regularisation_values[-1],
                                                                                 self.avg_corrcoeff))
-                else:
+                elif TPM is None and self.num_chains > 1:
                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 self.loss_values[-1],
@@ -180,5 +186,14 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                                                                 self.orthogonality_values[-1],
                                                                                 self.exclusivity_values[-1],
                                                                                 self.avg_corrcoeff))
+                else:
+                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
+                                                                                self.elapsed_epochs, 
+                                                                                self.loss_values[-1],
+                                                                                self.divergence_values[-1],
+                                                                                self.likelihood_values[-1],                                                    
+                                                                                self.sparsity_values[-1],
+                                                                                self.orthogonality_values[-1],
+                                                                                self.avg_corrcoeff))                   
             
         

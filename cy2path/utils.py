@@ -54,7 +54,7 @@ def check_TPM(adata, matrix_key='T_forward', recalc_matrix=False, self_transitio
         except: 
             adata.obsp[matrix_key] = get_transition_matrix(adata, self_transitions=self_transitions)
             terminal_states(adata, self_transitions=self_transitions)
-            logging.warning('Transition probability matrix was not present in .uns and was calculated.')
+            logging.warning('Transition probability matrix was not present in .obsp and was calculated.')
 
         if not issparse(adata.obsp[matrix_key]):
             adata.obsp[matrix_key] = csr_matrix(adata.obsp[matrix_key])

@@ -3,11 +3,13 @@ import torch
 from .methods import log_transform_params
 from .trainer import train
 
-class IFHMM(torch.nn.Module):
+from ..utils import log_domain_mean
+
+class FHMM(torch.nn.Module):
     
     ''' 
-    Independent chain Factorial latent dynamic model
-    with a common hidden state space trained on 
+    Latent dynamic model with a common latent state space 
+    and conditional state transitions per chain trained on 
     a Markov state simulation of an observed state TPM
     with SGD.
     
@@ -21,35 +23,40 @@ class IFHMM(torch.nn.Module):
         Number of observed states in the MSM simulation.
     num_iters : int
         Number of iterations of the MSM simulation.
+    restricted: Bool (default: False)
+        Condition emission matrix on chains.
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
-    P(node/iter) = sigma_chain sigma_state P(node/state, chain, iter)P(state, iter/chain)P(chain)
-    P(state, iter) is parametarised as a HMM i.e. P(state_current/state_previous)
+    P(node | iter) = sigma_chain sigma_state P(node | state, chain, iter)P(state | chain, iter)P(chain | iter)
+    P(state | iter) is parametarised as a HMM i.e. P(state_current | state_previous)
 
     '''
     
-    def __init__(self, num_states, num_chains, num_nodes, num_iters, use_gpu=False):
+    def __init__(self, num_states, num_chains, num_nodes, num_iters, restricted=True, use_gpu=False):
 
         super().__init__()
         self.num_nodes = num_nodes
         self.num_chains = num_chains
         self.num_states = num_states
         self.num_iters = num_iters
+        self.restricted = restricted
         self.use_gpu = use_gpu
         
         # Initial probability of being in any given hidden state
         self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states, self.num_chains))
 
         # Intialise the weights of each node towards each chain
-        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_chains))
+        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(
+                                                                         self.num_chains,
+                                                                         ))
 
         # Initialise emission matrix
-        # Enforce common latent state space
-        self.unnormalized_emission_matrix = torch.nn.Parameter(torch.randn(self.num_states,
-                                                                           1, #self.num_chains
-                                                                           self.num_nodes
-                                                                          ))
+        if self.restricted:
+            em_init = torch.randn(self.num_states, 1, self.num_nodes)
+        else:
+            em_init = torch.randn(self.num_states, self.num_chains, self.num_nodes)           
+        self.unnormalized_emission_matrix = torch.nn.Parameter(em_init)
                 
         # Initialise conditional transition probability matrices between hidden states
         self.unnormalized_transition_matrix = torch.nn.Parameter(torch.randn(self.num_chains,
@@ -66,6 +73,12 @@ class IFHMM(torch.nn.Module):
     
         log_transform_params(self)
         self.log_transition_matrix_ = self.log_transition_matrix
+
+        # # P(l/iter)
+        # self.log_transition_matrix = (self.log_transition_matrix_ + \
+        #                              log_domain_mean(self.log_chain_weights, use_gpu=self.is_cuda).unsqueeze(-1).unsqueeze(-1)).logsumexp(0) 
+
+        # P(l)
         self.log_transition_matrix = (self.log_transition_matrix_ + self.log_chain_weights.unsqueeze(-1).unsqueeze(-1)).logsumexp(0)
 
         # MSM iteration wise probability calculation
@@ -90,8 +103,14 @@ class IFHMM(torch.nn.Module):
                                            log_hidden_state_probs[t].unsqueeze(-1)
         
         # Joint probabilities
+
+        # P(l/iter)
+        # log_observed_state_probs_ = log_observed_state_probs_ + \
+        #                             self.log_chain_weights.unsqueeze(1).unsqueeze(-1)
+
+        # P(l)
         log_observed_state_probs_ = log_observed_state_probs_ + \
-                                    self.log_chain_weights.repeat(self.num_iters, 1).unsqueeze(1).unsqueeze(-1)
+                            self.log_chain_weights.repeat(self.num_iters, 1).unsqueeze(1).unsqueeze(-1)
 
         # Combine lineages                            
         log_observed_state_probs = log_observed_state_probs_.logsumexp(1).logsumexp(1)
@@ -198,9 +217,8 @@ class IFHMM(torch.nn.Module):
     
 
     # Train the model
-    def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0, exclusivity_weight=1.0, orthogonality_weight=1e-1,
+    def train(self, D, TPM=None, num_epochs=500, sparsity_weight=1.0, exclusivity_weight=0.0, orthogonality_weight=1e-1,
               optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
         train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
               orthogonality_weight=orthogonality_weight, optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, 
               swa_start=swa_start, verbose=verbose)
-            
