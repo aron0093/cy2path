@@ -127,10 +127,13 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
             # log_chain_states = log_observed_state_probs_mean.logsumexp(-1)
             # exclusivity = MI(use_gpu=self.is_cuda)(log_chain_states.exp())
 
-            log_chain_nodes = log_observed_state_probs_mean.logsumexp(0)
+            # log_chain_nodes = log_observed_state_probs_mean.logsumexp(0)
+            # exclusivity = torch.sum(torch.triu(torch.abs(torch.corrcoef(log_chain_nodes.exp())), 1))
+            # exclusivity /= self.num_chains*(self.num_chains-1)/2
 
-            exclusivity = torch.sum(torch.triu(torch.abs(torch.corrcoef(log_chain_nodes.exp())), 1))
-            exclusivity /= self.num_chains*(self.num_chains-1)/2
+            log_states_given_chain = log_observed_state_probs_mean.logsumexp(-1) -\
+                                     log_observed_state_probs_mean.logsumexp(-1).logsumexp(0, keepdims=True)
+            exclusivity = revgrad(JSDLoss(use_gpu=self.is_cuda)(log_states_given_chain), one)
 
             loss += self.exclusivity_weight*exclusivity
             self.exclusivity_values.append(exclusivity.item())
@@ -153,7 +156,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         
         # Print training summary
         self.elapsed_epochs += 1
-        if epoch % 100 == 99 or epoch <=10:
+        if epoch % 100 == 99 or epoch <=9:
             corrcoeffs = []
             outputs = torch.exp(prediction)
             for t in range(self.num_iters):

@@ -222,4 +222,3 @@ class FHMM(torch.nn.Module):
         train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
               orthogonality_weight=orthogonality_weight, optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, 
               swa_start=swa_start, verbose=verbose)
-            
