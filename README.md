@@ -18,11 +18,11 @@ The animation overlays $P(i \mid o)$ on a 2D UMAP embedding of the data ([Cerlet
 
 Assuming Markovian dynamics in the latent space aswell,
 
-<p align=center> $P(o \mid i) = \sum\limits_{s \in S} P(o \mid s_{i}) P(s_{t} \mid s_{i-1})$ </p>
+<p align=center> $P(o \mid i) = \sum\limits_{s_{i} \in S} P(o \mid s_{i}) \sum\limits_{s_{i-1} \in S} P(s_{i} \mid s_{i-1})$ </p>
 
 Multiple independent chains in a common latent space can be modelled using conditional latent TPMs ([Ghahramani & Jordan 1997](https://doi.org/10.1023/A:1007425814087)),
 
-<p align=center> $P(o \mid i) = \sum\limits_{l \in L} P(l) \sum\limits_{s \in S} P(o \mid s_{i}) P(s_{t} \mid s_{i-1}, l)$ </p>
+<p align=center> $P(o \mid i) = \sum\limits_{s_{i} \in S} P(o \mid s_{i}) \sum\limits_{l \in L} P(l) \sum\limits_{s_{i-1} \in S} P(s_{i} \mid s_{i-1}, l)$ </p>
 </td>
 </tr>
 </table>
