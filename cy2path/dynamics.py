@@ -151,6 +151,45 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
                           mode='FHMM', regularise_TPM=False, restricted=True, use_gpu=False, 
                           verbose=False, precomputed_emissions=None, precomputed_transitions=None,
                           save_model='./model', load_model=None, copy=False, **kwargs):
+    
+    ''' 
+    Infer dynamics in latent state space.
+    
+    Parameters
+    ----------
+    data: AnnData
+        AnnData object containing MSM simulation. 
+    model: optional (default: None)
+        Use initialised model class. Overrides other parameters.
+    num_states : int
+        Number of hidden states.
+    num_chains : int
+        Number of hidden Markov chains.
+    num_epochs : int
+        Number of training epochs.
+    mode: {'FHMM', 'LSSM', 'NSSM'} (default: 'FHMM')
+        Flavor of latent dynamic model to use.
+    regularise_TPM: Bool (default: False)
+        Use cell-state TPM to regularise training.
+    restricted: Bool (default: True)
+        Set to True for a common latent state space between lineages.
+    use_gpu : Bool (default: False)
+        Toggle GPU use.
+    verbose: Bool (default: False)
+        Verbose training report.
+    precomputed_emissions: optional (default: None)
+        Fix emission matrix parameters (no grad)
+    precomputed_transitions: optional (default: None)
+        Fix latent transition matrix parameters (no grad)
+    save_model: str (default: './model')
+        Path to save trained model.
+    load_model: optional (default: None)
+        Path to load trained model.
+    copy: Bool (default: False)
+        Save output inplace or return a copy.
+
+    Return: Returns or updates AnnData object.
+    '''
 
     adata = data.copy() if copy else data
     params_ = locals()
@@ -187,6 +226,7 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
     if load_model is not None:
         model.load_state_dict(load_model)
 
+    # TODO: If probabilities are passed don't use softmax
     if precomputed_emissions is not None:
         assert precomputed_emissions.shape==(model.num_states,1,model.num_nodes)
 

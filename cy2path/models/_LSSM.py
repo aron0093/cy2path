@@ -21,7 +21,7 @@ class LSSM(torch.nn.Module):
         Number of observed states in the MSM simulation.
     num_iters : int
         Number of iterations of the MSM simulation.
-    restricted: Bool (default: False)
+    restricted: Bool (default: True)
         Condition emission matrix on chains.
     use_gpu : Bool (default: False)
         Toggle GPU use.
@@ -45,7 +45,11 @@ class LSSM(torch.nn.Module):
         self.unnormalized_state_init = torch.nn.Parameter(torch.randn(self.num_states))
 
         # Intialise the weights of each node towards each chain
-        self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_states,
+        # self.unnormalized_chain_weights = torch.nn.Parameter(torch.randn(self.num_states,
+        #                                                                  self.num_chains,
+        #                                                                 ))
+
+        self.unnormalized_chain_weights = torch.nn.Parameter(torch.ones(self.num_states,
                                                                          self.num_chains,
                                                                         ))
 

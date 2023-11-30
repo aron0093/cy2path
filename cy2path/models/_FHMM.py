@@ -23,7 +23,7 @@ class FHMM(torch.nn.Module):
         Number of observed states in the MSM simulation.
     num_iters : int
         Number of iterations of the MSM simulation.
-    restricted: Bool (default: False)
+    restricted: Bool (default: True)
         Condition emission matrix on chains.
     use_gpu : Bool (default: False)
         Toggle GPU use.
@@ -110,7 +110,7 @@ class FHMM(torch.nn.Module):
 
         # P(l)
         log_observed_state_probs_ = log_observed_state_probs_ + \
-                            self.log_chain_weights.repeat(self.num_iters, 1).unsqueeze(1).unsqueeze(-1)
+                                    self.log_chain_weights.repeat(self.num_iters, 1).unsqueeze(1).unsqueeze(-1)
 
         # Combine lineages                            
         log_observed_state_probs = log_observed_state_probs_.logsumexp(1).logsumexp(1)

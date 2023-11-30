@@ -21,6 +21,8 @@ class NSSM(torch.nn.Module):
         Number of observed states in the MSM simulation.
     num_iters : int
         Number of iterations of the MSM simulation.
+    restricted: Bool (default: True)
+        Condition emission matrix on chains.
     use_gpu : Bool (default: False)
         Toggle GPU use.
 

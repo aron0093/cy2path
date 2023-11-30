@@ -97,7 +97,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
         # Model output
         prediction, log_observed_state_probs_, log_hidden_state_probs = self.forward_model()
-        
+
         # Sum up loss per chain
         divergence = self.criterion(prediction, D)
         loss = divergence
