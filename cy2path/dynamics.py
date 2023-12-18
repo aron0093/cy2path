@@ -148,8 +148,8 @@ def latent_state_selection(adata, states=None, criteria='argmax_joint', min_rati
 
 # Fit the latent dynamic model
 def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epochs=500, 
-                          mode='FHMM', regularise_TPM=False, restricted=True, use_gpu=False, 
-                          verbose=False, precomputed_emissions=None, precomputed_transitions=None,
+                          mode='FHMM', restricted=True, use_gpu=False, verbose=False, 
+                          precomputed_emissions=None, precomputed_transitions=None,
                           save_model='./model', load_model=None, copy=False, **kwargs):
     
     ''' 
@@ -169,8 +169,6 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
         Number of training epochs.
     mode: {'FHMM', 'LSSM', 'NSSM'} (default: 'FHMM')
         Flavor of latent dynamic model to use.
-    regularise_TPM: Bool (default: False)
-        Use cell-state TPM to regularise training.
     restricted: Bool (default: True)
         Set to True for a common latent state space between lineages.
     use_gpu : Bool (default: False)
@@ -199,11 +197,9 @@ def infer_latent_dynamics(data, model=None, num_states=10, num_chains=1, num_epo
     try: state_history = adata.uns['state_probability_sampling']['state_history']
     except: raise ValueError('State probability history could not be recovered. Run sample_state_probability() first')
 
-    if regularise_TPM:
-        check_TPM(adata)
-        TPM = torch.Tensor(adata.obsp['T_forward'].toarray())
-    else:
-        TPM = None
+    # Convert TPM to tensor
+    check_TPM(adata)
+    TPM = torch.Tensor(adata.obsp['T_forward'].toarray())
 
     # MSM simulation 
     state_history = torch.Tensor(adata.uns['state_probability_sampling']['state_history'])

@@ -6,7 +6,7 @@ from ..utils import log_domain_mean, JSDLoss, MI, revgrad
 from .methods import compute_log_likelihood   
 
 def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
-          exclusivity_weight=0.0, orthogonality_weight=0.0,
+          exclusivity_weight=0.0, orthogonality_weight=0.0, TPM_weight=0.0,
           optimizer=None, criterion=None, swa_scheduler=None, 
           swa_start=200, verbose=False):
     
@@ -27,6 +27,8 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
         Regularisation weight for orthogonal EM.
     exclusivity_weight : float (default: 0.0)
         Regularisation weight for exclsuive lineages.
+    TPM_weight: float (default: 0.0)
+        Regularisation weight for TPM.
     optimizer : (default: RMSProp(lr=0.2))
         Optimizer algorithm.
     criterion : (default: KLDivLoss())
@@ -42,18 +44,19 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
     # Put tensors on correct device
     identity = torch.ones(self.num_states)
-    one = torch.tensor([1])
+    chain_identity = torch.ones(self.num_chains)
     if self.is_cuda:
         D = D.cuda()
+        TPM = TPM.cuda()
+
         identity = identity.cuda()
-        one = one.cuda()
-        if TPM is not None:
-            TPM = TPM.cuda()
+        chain_identity = chain_identity.cuda()
 
     # Store regularisation weights and losses     
     self.sparsity_weight = sparsity_weight
     self.orthogonality_weight = orthogonality_weight
     self.exclusivity_weight = exclusivity_weight
+    self.TPM_weight = TPM_weight
         
     try: assert self.elapsed_epochs
     except: self.elapsed_epochs = 0
@@ -124,27 +127,27 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
         if self.num_chains > 1:
 
-            # log_chain_states = log_observed_state_probs_mean.logsumexp(-1)
-            # exclusivity = MI(use_gpu=self.is_cuda)(log_chain_states.exp())
+            log_nodes_given_chain = log_observed_state_probs_mean.logsumexp(0) -\
+                                    log_observed_state_probs_mean.logsumexp(0).logsumexp(-1, keepdims=True)
 
-            # log_chain_nodes = log_observed_state_probs_mean.logsumexp(0)
-            # exclusivity = torch.sum(torch.triu(torch.abs(torch.corrcoef(log_chain_nodes.exp())), 1))
-            # exclusivity /= self.num_chains*(self.num_chains-1)/2
+            log_chains_given_node = log_observed_state_probs_mean.logsumexp(0) -\
+                                    log_observed_state_probs_mean.logsumexp(0).logsumexp(0, keepdims=True)
+            
+            # Compute lineage x lineage transition matrix and minimize transitions
+            right_square = torch.matmul(log_nodes_given_chain.exp(), TPM)
+            right_square_left = torch.matmul(right_square, log_chains_given_node.transpose(1,0).exp())
 
-            log_states_given_chain = log_observed_state_probs_mean.logsumexp(-1) -\
-                                     log_observed_state_probs_mean.logsumexp(-1).logsumexp(0, keepdims=True)
-            exclusivity = revgrad(JSDLoss(use_gpu=self.is_cuda)(log_states_given_chain), one)
+            exclusivity = self.criterion(torch.diag(right_square_left.log()), chain_identity)
 
             loss += self.exclusivity_weight*exclusivity
             self.exclusivity_values.append(exclusivity.item())
 
         # Regularise latent states to be consider neighborhood transitions using TPM
-        if TPM is not None:
-            regularisation = self.criterion(log_nodes_given_state, 
-                                            torch.matmul(torch.exp(log_nodes_given_state.detach()), 
+        regularisation = self.criterion(log_nodes_given_state, 
+                                        torch.matmul(torch.exp(log_nodes_given_state.detach()), 
                                                          TPM))
-            loss += regularisation
-            self.regularisation_values.append(regularisation.item())
+        loss += self.TPM_weight*regularisation
+        self.regularisation_values.append(regularisation.item())
 
         # Backpropagate
         loss.backward()
@@ -165,7 +168,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
             # Print Loss
             if verbose:
-                if TPM is not None and self.num_chains > 1:
+                if self.TPM_weight!=0.0 and self.num_chains > 1:
                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Reg {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 self.loss_values[-1],
@@ -176,7 +179,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                                                                 self.exclusivity_values[-1],
                                                                                 self.regularisation_values[-1],
                                                                                 self.avg_corrcoeff))
-                elif TPM is None and self.num_chains > 1:
+                elif self.num_chains > 1:
                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 self.loss_values[-1],

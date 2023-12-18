@@ -205,7 +205,7 @@ class LSSM(torch.nn.Module):
 
     # Train the model
     def train(self, D, TPM=None, num_epochs=500, sparsity_weight=1.0, exclusivity_weight=0.0, orthogonality_weight=1e-1,
-              optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
+              TPM_weight=0.0, optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
         train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
-              orthogonality_weight=orthogonality_weight, optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, 
-              swa_start=swa_start, verbose=verbose)
+              orthogonality_weight=orthogonality_weight, TPM_weight=TPM_weight, optimizer=optimizer, criterion=criterion, 
+              swa_scheduler=swa_scheduler, swa_start=swa_start, verbose=verbose)
