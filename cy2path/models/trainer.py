@@ -2,7 +2,10 @@ import time
 import torch
 from tqdm.auto import tqdm
 
-from ..utils import log_domain_mean, JSDLoss, MI, revgrad
+import logging
+logging.basicConfig(level = logging.INFO)
+
+from ..utils import log_domain_mean, JSDLoss
 from .methods import compute_log_likelihood   
 
 def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
@@ -93,7 +96,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
 
     # Train        
     start_time = time.time()           
-    for epoch in tqdm(range(num_epochs), desc='Training dynamic model'):
+    for epoch in tqdm(range(num_epochs), desc='Training dynamic model', disable=verbose):
 
         # Reset gradients
         self.optimizer.zero_grad()
@@ -169,7 +172,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
             # Print Loss
             if verbose:
                 if self.TPM_weight!=0.0 and self.num_chains > 1:
-                    print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Reg {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
+                    logging.info('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Reg {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 self.loss_values[-1],
                                                                                 self.divergence_values[-1],
@@ -180,7 +183,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                                                                 self.regularisation_values[-1],
                                                                                 self.avg_corrcoeff))
                 elif self.num_chains > 1:
-                    print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
+                    logging.info('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 self.loss_values[-1],
                                                                                 self.divergence_values[-1],
@@ -190,7 +193,7 @@ def train(self, D, TPM=None, num_epochs=300, sparsity_weight=1.0,
                                                                                 self.exclusivity_values[-1],
                                                                                 self.avg_corrcoeff))
                 else:
-                     print('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
+                     logging.info('{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Corcoef {:.2f}'.format(time.time() - start_time,
                                                                                 self.elapsed_epochs, 
                                                                                 self.loss_values[-1],
                                                                                 self.divergence_values[-1],
