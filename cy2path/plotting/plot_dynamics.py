@@ -296,7 +296,7 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
     axs.flat[10].set_xticklabels(axs.flat[10].get_xticklabels(), rotation=rotation)
 
     # Annotation, kinetic transitional entropy overlap
-    t_entropy_df = adata.obs.groupby(['kinetic_states', cluster_key]).sum().reset_index()
+    t_entropy_df = adata.obs.groupby(['kinetic_states', cluster_key]).count().reset_index()
     t_entropy_df = t_entropy_df.pivot(index='kinetic_states', columns=cluster_key, 
                                   values='transitional_entropy').astype(float).round(2)
     t_entropy_df = t_entropy_df.divide(adata.obs.groupby(cluster_key).count().transitional_entropy, axis=1)
@@ -316,7 +316,7 @@ def plot_dynamics_summary(adata, cluster_key: str, use_selected=True,
     axs.flat[13].set_xticklabels(axs.flat[13].get_xticklabels(), rotation=rotation)
 
     # Annotation, kinetic differentiation entropy overlap
-    d_entropy_df = adata.obs.groupby(['kinetic_states', cluster_key]).sum().reset_index()
+    d_entropy_df = adata.obs.groupby(['kinetic_states', cluster_key]).count().reset_index()
     d_entropy_df = d_entropy_df.pivot(index='kinetic_states', columns=cluster_key, 
                                       values='differentiation_entropy').astype(float).round(2)
     d_entropy_df = d_entropy_df.divide(adata.obs.groupby(cluster_key).count().differentiation_entropy, axis=1)
