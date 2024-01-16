@@ -21,6 +21,8 @@ class NSSM(torch.nn.Module):
         Number of observed states in the MSM simulation.
     num_iters : int
         Number of iterations of the MSM simulation.
+    restricted: Bool (default: True)
+        Condition emission matrix on chains.
     use_gpu : Bool (default: False)
         Toggle GPU use.
 
@@ -195,9 +197,10 @@ class NSSM(torch.nn.Module):
         return log_delta, psi, log_max, best_path
     
     # Train the model
-    def train(self, D, TPM=None, num_epochs=500, sparsity_weight=1.0, exclusivity_weight=0.0, orthogonality_weight=1e-1,
-              optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
+    #TODO: exclusivity loss must be scaled with num_cells for this flavor
+    def train(self, D, TPM=None, num_epochs=500, sparsity_weight=1.0, exclusivity_weight=1e-5, orthogonality_weight=1e-1,
+              TPM_weight=0.0, optimizer=None, criterion=None, swa_scheduler=None, swa_start=200, verbose=False):
         train(self, D, TPM=TPM, num_epochs=num_epochs, sparsity_weight=sparsity_weight, exclusivity_weight=exclusivity_weight,
-              orthogonality_weight=orthogonality_weight, optimizer=optimizer, criterion=criterion, swa_scheduler=swa_scheduler, 
-              swa_start=swa_start, verbose=verbose)
+              orthogonality_weight=orthogonality_weight, TPM_weight=TPM_weight, optimizer=optimizer, criterion=criterion, 
+              swa_scheduler=swa_scheduler, swa_start=swa_start, verbose=verbose)
 

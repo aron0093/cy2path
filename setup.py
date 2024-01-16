@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
   name='cy2path',
-  version='0.0.2',
+  version='0.0.3',
   license='GNU General Public License v3 (GPLv3)',
   description='Lineage inference with factorial latent dynamic models trained on Markovian simulations of biological processes using single cell RNA sequencing data.',
   author = 'Revant Gupta',                   
@@ -12,16 +12,10 @@ setup(
               'state-space models', 'markov chain simulation'],
   install_requires=[
       'scvelo',
-      'seaborn',
       'scikit-learn>=1.3.0',
       'imageio==2.19.3',
-      'tqdm',
       'hausdorff',
       'dtaidistance',
-      'torch',
-      'numpy==1.23.5', # scvelo errors
-      'pandas==1.3.5', # scvelo errors
-      'matplotlib==3.3.4' # scvelo errors
       ],
   classifiers=[
     'Development Status :: 3 - Alpha',
@@ -31,4 +25,6 @@ setup(
     'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+
   ])
