@@ -30,3 +30,7 @@ Multiple independent chains in a common latent space can be modelled using condi
 ### Citation
 
 Claassen, M., & Gupta, R. (2023). Factorial state-space modelling for kinetic clustering and lineage inference. https://doi.org/10.1101/2023.08.21.554135
+
+### Notebooks
+
+Demonstration notebooks can be found [here](https://github.com/aron0093/cy2path_notebooks). 
