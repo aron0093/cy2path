@@ -6,7 +6,7 @@ import pandas as pd
 import torch
 from scipy.stats import mannwhitneyu, median_test, ttest_ind, wilcoxon  # noqa
 
-from .dynamics import *
+from .dynamics import infer_dynamics, infer_kinetic_clusters
 
 
 # Run grid search to identify best model parameters
@@ -79,7 +79,7 @@ def run_search(
                 idx, 'orthogonality_weight'
             ]
 
-        model, adata_ = infer_latent_dynamics(
+        model, adata_ = infer_dynamics(
             adata,
             num_states=fit_values.loc[idx, 'num_states'],
             num_chains=fit_values.loc[idx, 'num_chains'],

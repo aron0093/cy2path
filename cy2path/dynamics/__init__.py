@@ -5,3 +5,11 @@ from .infer_posthoc import (
     infer_latent_paths,
     infer_lineage_probabilities,
 )
+
+__all__ = [
+    'infer_dynamics',
+    'infer_joint_dynamics',
+    'infer_kinetic_clusters',
+    'infer_latent_paths',
+    'infer_lineage_probabilities',
+]
