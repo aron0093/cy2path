@@ -107,7 +107,7 @@ def cluster_markov_chains(
                     model.linkage, num_lineages, criterion='maxclust'
                 )
 
-            elif method == 'kmediods':
+            elif method == 'kmedoids':
                 model = clustering.KMedoids(distance_func, {}, k=num_lineages)
                 cluster_labels = model.fit(simulations)
             else:
@@ -132,12 +132,12 @@ def cluster_markov_chains(
         )
         cluster_labels = model.fit_predict(distances)
 
-    elif type(num_lineages) is int and method in ['linkage', 'kmediods']:
+    elif type(num_lineages) is int and method in ['linkage', 'kmedoids']:
         cluster_labels, model = cluster_n_lineages(
             num_lineages, method, distance_func, simulations
         )
 
-    elif num_lineages == 'auto' and method in ['linkage', 'kmediods']:
+    elif num_lineages == 'auto' and method in ['linkage', 'kmedoids']:
         if max_lineages > 2:
             # Compute pairwise distance matrix
             distances = distance_func(simulations)
@@ -175,7 +175,7 @@ def cluster_markov_chains(
             adata.uns['cytopath']['optimal_num_lineages'] = optimal_num_lineages
         else:
             raise ValueError(
-                'max_lineages must be greater than 2 for auto mode with linkage or kmediods!'
+                'max_lineages must be greater than 2 for auto mode with linkage or kmedoids!'
             )
     else:
         raise ValueError('Incompatible num_lineages and method specification!')
