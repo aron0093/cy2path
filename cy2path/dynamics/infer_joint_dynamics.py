@@ -16,7 +16,7 @@ def infer_joint_dynamics(
     num_chains=1,
     num_epochs=500,
     num_epoch_bins=50,
-    mode="FHMM",
+    mode='FHMM',
     restricted=True,
     use_gpu=False,
     verbose=False,
@@ -24,7 +24,7 @@ def infer_joint_dynamics(
     precomputed_transitions=None,
     emissions_grad=False,
     transitions_grad=False,
-    save_models="./models/",
+    save_models='./models/',
     load_models=None,
     copy=False,
     **kwargs,
@@ -86,7 +86,7 @@ def infer_joint_dynamics(
     elif isinstance(save_models, str):
         os.makedirs(save_models, exist_ok=True)
         save_models_ = [
-            os.path.join(save_models, "model_{}".format(num))
+            os.path.join(save_models, 'model_{}'.format(num))
             for num in range(len(adatas))
         ]
 
@@ -103,7 +103,7 @@ def infer_joint_dynamics(
     # Default behavior in infer_dynamics, grad is always True if not precomputed
     # grad is False (default) if precomputed unless supplied True
     if precomputed_transitions is None:
-        if mode == "FHMM":
+        if mode == 'FHMM':
             unnormalized_transition_matrix = torch.nn.Parameter(
                 torch.randn(num_chains, num_states, num_states)
             )
@@ -125,7 +125,7 @@ def infer_joint_dynamics(
     cur_bin = 0
     while cur_bin < num_epoch_bins:
         for num, adata in enumerate(adatas):
-            logging.info("Training data {} in round {}.".format(num, cur_bin))
+            logging.info('Training data {} in round {}.'.format(num, cur_bin))
 
             if copy:
                 model, adata = infer_dynamics(

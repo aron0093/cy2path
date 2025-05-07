@@ -12,7 +12,7 @@ from .utils import check_root_init, check_TPM, estimate_stationary_state
 logging.basicConfig(level=logging.INFO)
 
 
-def extract_nonzero_entries(adata, matrix_key="T_forward"):
+def extract_nonzero_entries(adata, matrix_key='T_forward'):
     # Extract non zero elements and create cumumlative distribution
     trans_matrix_indices = np.split(
         adata.obsp[matrix_key].indices, adata.obsp[matrix_key].indptr
@@ -55,7 +55,7 @@ def extract_nonzero_entries(adata, matrix_key="T_forward"):
 
 # Sample markov chains
 def iterate_markov_chain(
-    adata, matrix_key="T_forward", max_iter=1000, init_state=None, nonzero_entries=None
+    adata, matrix_key='T_forward', max_iter=1000, init_state=None, nonzero_entries=None
 ):
     if nonzero_entries is None:
         trans_matrix_indice_nonzeros, trans_matrix_probabilites_nonzeros = (
@@ -89,14 +89,14 @@ def iterate_markov_chain(
 
 def sample_markov_chains(
     data,
-    matrix_key="T_forward",
+    matrix_key='T_forward',
     recalc_matrix=False,
     self_transitions=False,
-    init="root_cells",
+    init='root_cells',
     repeat_root=True,
     num_chains=1000,
     max_iter=1000,
-    convergence="auto",
+    convergence='auto',
     tol=1e-5,
     n_jobs=-1,
     copy=False,
@@ -144,25 +144,25 @@ def sample_markov_chains(
             ),
         )
         for i in tqdm(
-            range(num_chains), desc="Iterating Markov chains", unit=" simulations"
+            range(num_chains), desc='Iterating Markov chains', unit=' simulations'
         )
     )
     # Store Markov chains
-    for i in tqdm(range(num_chains), desc="Storing Markov chains", unit=" simulations"):
+    for i in tqdm(range(num_chains), desc='Storing Markov chains', unit=' simulations'):
         state_transition_probabilities[i] = simulations[i][1]
         state_indices[i] = simulations[i][0]
 
     # Empirical state history distributions
     state_history_max_iter = np.empty((max_iter, adata.shape[0]), dtype=np.float32)
     for k in tqdm(
-        range(max_iter), desc="Computing empirical state probability distribution"
+        range(max_iter), desc='Computing empirical state probability distribution'
     ):
         indices, counts = np.unique(state_indices[:, k], return_counts=True)
         probs = counts / counts.sum()
         state_history_max_iter[k, indices] = probs
 
     # Get convergence criteria to select number of simulation steps
-    if convergence == "auto":
+    if convergence == 'auto':
         convergence_check = iterate_state_probability(
             adata,
             matrix_key=matrix_key,
@@ -177,15 +177,15 @@ def sample_markov_chains(
     # Convergence of cluster proportions to stationary state
     elif convergence in adata.obs.columns:
         if not pd.api.types.is_categorical_dtype(adata.obs[convergence]):
-            logging.warning(f"{convergence} in adata.obs should be categorical.")
+            logging.warning(f'{convergence} in adata.obs should be categorical.')
         stationary_state_probability_by_cluster = (
             pd.DataFrame(
                 {
-                    "cluster": adata.obs[convergence].astype("category"),
-                    "probability": stationary_state_probability,
+                    'cluster': adata.obs[convergence].astype('category'),
+                    'probability': stationary_state_probability,
                 }
             )
-            .groupby("cluster")
+            .groupby('cluster')
             .sum()
         )
         cluster_sequences = adata.obs[convergence].astype(str).values[state_indices]
@@ -206,58 +206,58 @@ def sample_markov_chains(
         convergence_check = check_convergence_criteria(eps_history, tol)
         if isinstance(convergence_check, int) and convergence_check < max_iter:
             logging.info(
-                "Tolerance reached after {} iterations of {}.".format(
+                'Tolerance reached after {} iterations of {}.'.format(
                     convergence_check, max_iter
                 )
             )
         else:
-            logging.warning("Max number ({}) of iterations reached.".format(max_iter))
+            logging.warning('Max number ({}) of iterations reached.'.format(max_iter))
             convergence_check = max_iter
 
     state_indices_converged = state_indices[:, :convergence_check]
     state_history_converged = state_history_max_iter[:convergence_check]
 
-    adata.uns["markov_chain_sampling"] = {}
-    adata.uns["markov_chain_sampling"]["state_indices"] = state_indices_converged
-    adata.uns["markov_chain_sampling"]["state_history"] = state_history_converged
-    adata.uns["markov_chain_sampling"]["state_indices_max_iter"] = state_indices
-    adata.uns["markov_chain_sampling"]["state_history_max_iter"] = (
+    adata.uns['markov_chain_sampling'] = {}
+    adata.uns['markov_chain_sampling']['state_indices'] = state_indices_converged
+    adata.uns['markov_chain_sampling']['state_history'] = state_history_converged
+    adata.uns['markov_chain_sampling']['state_indices_max_iter'] = state_indices
+    adata.uns['markov_chain_sampling']['state_history_max_iter'] = (
         state_history_max_iter
     )
-    adata.uns["markov_chain_sampling"]["state_transition_probabilities_max_iter"] = (
+    adata.uns['markov_chain_sampling']['state_transition_probabilities_max_iter'] = (
         state_transition_probabilities
     )
-    adata.uns["markov_chain_sampling"]["init_state_probability"] = (
+    adata.uns['markov_chain_sampling']['init_state_probability'] = (
         init_state_probability
     )
-    adata.uns["markov_chain_sampling"]["stationary_state_probability"] = (
+    adata.uns['markov_chain_sampling']['stationary_state_probability'] = (
         stationary_state_probability
     )
-    adata.uns["markov_chain_sampling"]["sampling_params"] = {
-        "recalc_matrix": recalc_matrix,
-        "self_transitions": self_transitions,
-        "init_type": init_type,
-        "max_iter": max_iter,
-        "num_chains": num_chains,
-        "convergence": convergence_check,
-        "convergence_criterion": convergence,
-        "tol": tol,
-        "copy": copy,
+    adata.uns['markov_chain_sampling']['sampling_params'] = {
+        'recalc_matrix': recalc_matrix,
+        'self_transitions': self_transitions,
+        'init_type': init_type,
+        'max_iter': max_iter,
+        'num_chains': num_chains,
+        'convergence': convergence_check,
+        'convergence_criterion': convergence,
+        'tol': tol,
+        'copy': copy,
     }
     if convergence in adata.obs.columns:
-        adata.uns["markov_chain_sampling"]["stationary_state_by_cluster"] = (
+        adata.uns['markov_chain_sampling']['stationary_state_by_cluster'] = (
             stationary_state_by_cluster.values
         )
-        adata.uns["markov_chain_sampling"]["cluster_sequences"] = cluster_sequences[
+        adata.uns['markov_chain_sampling']['cluster_sequences'] = cluster_sequences[
             :, :convergence_check
         ]
-        adata.uns["markov_chain_sampling"]["cluster_proportions"] = (
+        adata.uns['markov_chain_sampling']['cluster_proportions'] = (
             cluster_proportions.values[:, :convergence_check].T
         )
-        adata.uns["markov_chain_sampling"]["cluster_sequences_max_iter"] = (
+        adata.uns['markov_chain_sampling']['cluster_sequences_max_iter'] = (
             cluster_sequences
         )
-        adata.uns["markov_chain_sampling"]["cluster_proportions_max_iter"] = (
+        adata.uns['markov_chain_sampling']['cluster_proportions_max_iter'] = (
             cluster_proportions.values.T
         )
     if copy:

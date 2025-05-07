@@ -18,7 +18,7 @@ def extract_model_outputs(adata, model):
 
     # MSM simulation
     state_history = torch.Tensor(
-        adata.uns["state_probability_sampling"]["state_history"]
+        adata.uns['state_probability_sampling']['state_history']
     )
 
     log_alpha, log_probs = model.filtering(state_history)
@@ -26,54 +26,54 @@ def extract_model_outputs(adata, model):
     log_delta, psi, log_max, best_path = model.viterbi(state_history)
 
     # Model outputs
-    adata.uns["latent_dynamics"]["model_outputs"] = {}
+    adata.uns['latent_dynamics']['model_outputs'] = {}
 
-    adata.uns["latent_dynamics"]["model_outputs"]["latent_state_history"] = (
+    adata.uns['latent_dynamics']['model_outputs']['latent_state_history'] = (
         exponentiate_detach(log_hidden_state_probs)
     )
-    adata.uns["latent_dynamics"]["model_outputs"]["predicted_state_history"] = (
+    adata.uns['latent_dynamics']['model_outputs']['predicted_state_history'] = (
         exponentiate_detach(log_observed_state_probs)
     )
-    adata.uns["latent_dynamics"]["model_outputs"]["joint_probabilities"] = (
+    adata.uns['latent_dynamics']['model_outputs']['joint_probabilities'] = (
         exponentiate_detach(log_observed_state_probs_)
     )
 
-    adata.uns["latent_dynamics"]["model_outputs"]["log_filtering"] = (
+    adata.uns['latent_dynamics']['model_outputs']['log_filtering'] = (
         log_alpha.detach().cpu().numpy()
     )
-    adata.uns["latent_dynamics"]["model_outputs"]["log_smoothing"] = (
+    adata.uns['latent_dynamics']['model_outputs']['log_smoothing'] = (
         log_gamma.detach().cpu().numpy()
     )
-    adata.uns["latent_dynamics"]["model_outputs"]["log_viterbi"] = (
+    adata.uns['latent_dynamics']['model_outputs']['log_viterbi'] = (
         log_delta.detach().cpu().numpy()
     )
-    adata.uns["latent_dynamics"]["model_outputs"]["viterbi_path"] = (
+    adata.uns['latent_dynamics']['model_outputs']['viterbi_path'] = (
         np.array(best_path).astype(int).T
     )
 
     # Model params
-    adata.uns["latent_dynamics"]["model_params"] = {}
-    adata.uns["latent_dynamics"]["model_params"]["chain_weights"] = exponentiate_detach(
+    adata.uns['latent_dynamics']['model_params'] = {}
+    adata.uns['latent_dynamics']['model_params']['chain_weights'] = exponentiate_detach(
         model.log_chain_weights
     )
-    adata.uns["latent_dynamics"]["model_params"]["emission_matrix"] = (
+    adata.uns['latent_dynamics']['model_params']['emission_matrix'] = (
         exponentiate_detach(model.log_emission_matrix)
     )
-    adata.uns["latent_dynamics"]["model_params"]["latent_transition_matrix"] = (
+    adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'] = (
         exponentiate_detach(model.log_transition_matrix)
     )
 
     # TODO: Unify output for all model types
-    if adata.uns["latent_dynamics"]["latent_dynamics_params"]["mode"] == "FHMM":
-        adata.uns["latent_dynamics"]["model_params"][
-            "conditional_latent_transition_matrix"
-        ] = adata.uns["latent_dynamics"]["model_params"]["latent_transition_matrix"]
-        adata.uns["latent_dynamics"]["model_params"]["latent_transition_matrix"] *= (
-            adata.uns["latent_dynamics"]["model_params"]["chain_weights"][:, None, None]
+    if adata.uns['latent_dynamics']['latent_dynamics_params']['mode'] == 'FHMM':
+        adata.uns['latent_dynamics']['model_params'][
+            'conditional_latent_transition_matrix'
+        ] = adata.uns['latent_dynamics']['model_params']['latent_transition_matrix']
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'] *= (
+            adata.uns['latent_dynamics']['model_params']['chain_weights'][:, None, None]
         )
-        adata.uns["latent_dynamics"]["model_params"]["latent_transition_matrix"] = (
-            adata.uns["latent_dynamics"]["model_params"][
-                "latent_transition_matrix"
+        adata.uns['latent_dynamics']['model_params']['latent_transition_matrix'] = (
+            adata.uns['latent_dynamics']['model_params'][
+                'latent_transition_matrix'
             ].sum(0)
         )
 
@@ -82,40 +82,40 @@ def extract_model_outputs(adata, model):
         log_observed_state_probs_, use_gpu=model.is_cuda
     )
 
-    adata.uns["latent_dynamics"]["conditional_probabilities"] = {}
-    adata.uns["latent_dynamics"]["conditional_probabilities"]["state_given_nodes"] = (
+    adata.uns['latent_dynamics']['conditional_probabilities'] = {}
+    adata.uns['latent_dynamics']['conditional_probabilities']['state_given_nodes'] = (
         exponentiate_detach(
             log_observed_state_probs_mean.logsumexp(1)
             - log_observed_state_probs_mean.logsumexp(1).logsumexp(0, keepdims=True)
         )
     )
-    adata.uns["latent_dynamics"]["conditional_probabilities"]["chain_given_nodes"] = (
+    adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_nodes'] = (
         exponentiate_detach(
             log_observed_state_probs_mean.logsumexp(0)
             - log_observed_state_probs_mean.logsumexp(0).logsumexp(0, keepdims=True)
         )
     )
-    adata.uns["latent_dynamics"]["conditional_probabilities"]["chain_given_state"] = (
+    adata.uns['latent_dynamics']['conditional_probabilities']['chain_given_state'] = (
         exponentiate_detach(
             log_observed_state_probs_mean.logsumexp(-1)
             - log_observed_state_probs_mean.logsumexp(-1).logsumexp(1, keepdims=True)
         )
     )
-    adata.uns["latent_dynamics"]["conditional_probabilities"][
-        "chain_state_given_nodes"
+    adata.uns['latent_dynamics']['conditional_probabilities'][
+        'chain_state_given_nodes'
     ] = exponentiate_detach(
         log_observed_state_probs_mean
         - log_observed_state_probs_mean.logsumexp(0, keepdims=True).logsumexp(
             1, keepdims=True
         )
     )
-    adata.uns["latent_dynamics"]["conditional_probabilities"][
-        "node_given_chain_state"
+    adata.uns['latent_dynamics']['conditional_probabilities'][
+        'node_given_chain_state'
     ] = exponentiate_detach(
         log_observed_state_probs_mean
         - log_observed_state_probs_mean.logsumexp(-1, keepdims=True)
     )
-    adata.uns["latent_dynamics"]["conditional_probabilities"]["node_given_state"] = (
+    adata.uns['latent_dynamics']['conditional_probabilities']['node_given_state'] = (
         exponentiate_detach(
             log_observed_state_probs_mean.logsumexp(1)
             - log_observed_state_probs_mean.logsumexp(1).logsumexp(-1, keepdims=True)
@@ -130,7 +130,7 @@ def infer_dynamics(
     num_states=10,
     num_chains=1,
     num_epochs=500,
-    mode="FHMM",
+    mode='FHMM',
     restricted=True,
     use_gpu=False,
     verbose=False,
@@ -138,7 +138,7 @@ def infer_dynamics(
     precomputed_transitions=None,
     emissions_grad=False,
     transitions_grad=False,
-    save_model="./model",
+    save_model='./model',
     load_model=None,
     copy=False,
     **kwargs,
@@ -188,31 +188,31 @@ def infer_dynamics(
 
     # Don't save entire anndata in params
     params_ = locals()
-    del params_["data"]
-    del params_["adata"]
+    del params_['data']
+    del params_['adata']
 
     # Check if state history exists
     try:
-        state_history = adata.uns["state_probability_sampling"]["state_history"]
+        state_history = adata.uns['state_probability_sampling']['state_history']
     except:
         raise ValueError(
-            "State probability history could not be recovered. Run sample_state_probability() first"
+            'State probability history could not be recovered. Run sample_state_probability() first'
         )
 
     # Convert TPM to tensor
     check_TPM(adata)
-    TPM = torch.Tensor(adata.obsp["T_forward"].toarray())
+    TPM = torch.Tensor(adata.obsp['T_forward'].toarray())
 
     # MSM simulation
     state_history = torch.Tensor(
-        adata.uns["state_probability_sampling"]["state_history"]
+        adata.uns['state_probability_sampling']['state_history']
     )
     if use_gpu:
         state_history = state_history.cuda()
 
     # Initialise the model
     if model is None and load_model is None:
-        if mode == "LSSM":
+        if mode == 'LSSM':
             model = LSSM(
                 num_states,
                 num_chains,
@@ -221,7 +221,7 @@ def infer_dynamics(
                 restricted=restricted,
                 use_gpu=use_gpu,
             )
-        elif mode == "NSSM":
+        elif mode == 'NSSM':
             model = NSSM(
                 num_states,
                 num_chains,
@@ -230,7 +230,7 @@ def infer_dynamics(
                 restricted=restricted,
                 use_gpu=use_gpu,
             )
-        elif mode == "FHMM":
+        elif mode == 'FHMM':
             model = FHMM(
                 num_states,
                 num_chains,
@@ -267,14 +267,14 @@ def infer_dynamics(
     )
 
     # Save params
-    adata.uns["latent_dynamics"] = {}
-    adata.uns["latent_dynamics"]["latent_dynamics_params"] = params_
+    adata.uns['latent_dynamics'] = {}
+    adata.uns['latent_dynamics']['latent_dynamics_params'] = params_
 
     # Model outputs
     extract_model_outputs(adata, model)
 
     # Compute Likelihood P(Data/Model)
-    adata.uns["latent_dynamics"]["log_likelihood"] = model.log_likelihood.item()
+    adata.uns['latent_dynamics']['log_likelihood'] = model.log_likelihood.item()
 
     if save_model is not None:
         torch.save(model.state_dict(), save_model)

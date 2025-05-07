@@ -120,12 +120,12 @@ def train(
     self.swa_scheduler = swa_scheduler
     self.criterion = criterion
     if self.criterion is None:
-        self.criterion = torch.nn.KLDivLoss(reduction="batchmean", log_target=False)
+        self.criterion = torch.nn.KLDivLoss(reduction='batchmean', log_target=False)
 
     # Train
     start_time = time.time()
     for epoch in tqdm(
-        range(num_epochs), desc="Training dynamic model", disable=verbose
+        range(num_epochs), desc='Training dynamic model', disable=verbose
     ):
         # Reset gradients
         self.optimizer.zero_grad()
@@ -213,7 +213,7 @@ def train(
             if verbose:
                 if self.TPM_weight != 0.0 and self.num_chains > 1:
                     logging.info(
-                        "{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Reg {:.2E} Corcoef {:.2f}".format(
+                        '{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Reg {:.2E} Corcoef {:.2f}'.format(
                             time.time() - start_time,
                             self.elapsed_epochs,
                             self.loss_values[-1],
@@ -228,7 +228,7 @@ def train(
                     )
                 elif self.num_chains > 1:
                     logging.info(
-                        "{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Corcoef {:.2f}".format(
+                        '{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Exl {:.2E} Corcoef {:.2f}'.format(
                             time.time() - start_time,
                             self.elapsed_epochs,
                             self.loss_values[-1],
@@ -242,7 +242,7 @@ def train(
                     )
                 else:
                     logging.info(
-                        "{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Corcoef {:.2f}".format(
+                        '{:.2f}s. It {} Loss {:.2E} KL {:.2E} Likl {:.2E} Sparse {:.2E} Orth {:.2E} Corcoef {:.2f}'.format(
                             time.time() - start_time,
                             self.elapsed_epochs,
                             self.loss_values[-1],

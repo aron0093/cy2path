@@ -27,7 +27,7 @@ def check_convergence_criteria(eps_history, tol=1e-5):
 
 # Update state probabilities by taking dot product with TPM
 def iterate_state_probability(
-    adata, matrix_key="T_forward", init=None, stationary=None, max_iter=1000, tol=1e-5
+    adata, matrix_key='T_forward', init=None, stationary=None, max_iter=1000, tol=1e-5
 ):
     # Iterate state probabilities
     state_history_max_iter = np.empty((max_iter, adata.shape[0]))
@@ -35,7 +35,7 @@ def iterate_state_probability(
 
     # Iteratively calculate distribution
     current_state_probability = init
-    for i in tqdm(range(max_iter), desc="Iterating state probability distributions"):
+    for i in tqdm(range(max_iter), desc='Iterating state probability distributions'):
         state_history_max_iter[i] = current_state_probability
         current_state_probability = csr_matrix.dot(
             current_state_probability, adata.obsp[matrix_key]
@@ -48,12 +48,12 @@ def iterate_state_probability(
     convergence_check = check_convergence_criteria(eps_history, tol=tol)
     if isinstance(convergence_check, int) and convergence_check < max_iter:
         logging.info(
-            "Tolerance reached after {} iterations of {}.".format(
+            'Tolerance reached after {} iterations of {}.'.format(
                 convergence_check, max_iter
             )
         )
     else:
-        logging.warning("Max number ({}) of iterations reached.".format(max_iter))
+        logging.warning('Max number ({}) of iterations reached.'.format(max_iter))
         convergence_check = max_iter
 
     state_history = state_history_max_iter[:convergence_check]
@@ -63,10 +63,10 @@ def iterate_state_probability(
 # Evolve state probabilities
 def sample_state_probability(
     data,
-    matrix_key="T_forward",
+    matrix_key='T_forward',
     recalc_matrix=False,
     self_transitions=False,
-    init="root_cells",
+    init='root_cells',
     max_iter=1000,
     tol=1e-5,
     copy=False,
@@ -100,25 +100,25 @@ def sample_state_probability(
         )
     )
 
-    adata.uns["state_probability_sampling"] = {}
-    adata.uns["state_probability_sampling"]["state_history"] = state_history
-    adata.uns["state_probability_sampling"]["state_history_max_iter"] = (
+    adata.uns['state_probability_sampling'] = {}
+    adata.uns['state_probability_sampling']['state_history'] = state_history
+    adata.uns['state_probability_sampling']['state_history_max_iter'] = (
         state_history_max_iter
     )
-    adata.uns["state_probability_sampling"]["init_state_probability"] = (
+    adata.uns['state_probability_sampling']['init_state_probability'] = (
         init_state_probability
     )
-    adata.uns["state_probability_sampling"]["stationary_state_probability"] = (
+    adata.uns['state_probability_sampling']['stationary_state_probability'] = (
         stationary_state_probability
     )
-    adata.uns["state_probability_sampling"]["sampling_params"] = {
-        "recalc_matrix": recalc_matrix,
-        "self_transitions": self_transitions,
-        "init_type": init_type,
-        "max_iter": max_iter,
-        "convergence": convergence_check,
-        "tol": tol,
-        "copy": copy,
+    adata.uns['state_probability_sampling']['sampling_params'] = {
+        'recalc_matrix': recalc_matrix,
+        'self_transitions': self_transitions,
+        'init_type': init_type,
+        'max_iter': max_iter,
+        'convergence': convergence_check,
+        'tol': tol,
+        'copy': copy,
     }
     if copy:
         return adata

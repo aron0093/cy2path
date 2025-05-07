@@ -28,13 +28,13 @@ logging.basicConfig(level=logging.INFO)
 # Keywords: single-cell RNA sequencing; RNA velocity; trajectory inference; simulation-based inference
 
 
-def compute_Hausdorff_distance(simulations, distance="euclidean"):
+def compute_Hausdorff_distance(simulations, distance='euclidean'):
     num_chains = len(simulations)
     hausdorff_distances = np.zeros((num_chains, num_chains))
     for i in tqdm(
         range(num_chains - 1, -1, -1),
-        desc="Computing hausdorff distances",
-        unit=" simulations",
+        desc='Computing hausdorff distances',
+        unit=' simulations',
     ):
         for j in range(i):
             hausdorff_distances[i, j] = hausdorff_distance(
@@ -49,19 +49,19 @@ def compute_Hausdorff_distance(simulations, distance="euclidean"):
 def cluster_markov_chains(
     adata,
     num_lineages=None,
-    method="HDBSCAN",
-    distance_func="dtw",
+    method='HDBSCAN',
+    distance_func='dtw',
     differencing=False,
-    basis="pca",
+    basis='pca',
     n_jobs=-1,
 ):
     # Compute pariwise distance matrix for simulations
-    num_chains = adata.uns["markov_chain_sampling"]["sampling_params"]["num_chains"]
-    markov_chains = adata.uns["markov_chain_sampling"]["state_indices"]
+    num_chains = adata.uns['markov_chain_sampling']['sampling_params']['num_chains']
+    markov_chains = adata.uns['markov_chain_sampling']['state_indices']
 
     # Cell state representation to be used for distance calculations
     if isinstance(basis, str):
-        cell_state_repr = adata.obsm["X_{}".format(basis)]
+        cell_state_repr = adata.obsm['X_{}'.format(basis)]
     elif basis is None:
         if issparse(adata.X):
             cell_state_repr = adata.X.toarray()
@@ -80,50 +80,50 @@ def cluster_markov_chains(
         cell_state_repr = adata.X[:, gene_locs]
 
     else:
-        raise ValueError("Cannot compute distances with provided basis key.")
+        raise ValueError('Cannot compute distances with provided basis key.')
 
     # Cluster simulations
-    logging.info("Clustering the samples.")
+    logging.info('Clustering the samples.')
 
-    simulations = cell_state_repr[markov_chains].astype("double")
+    simulations = cell_state_repr[markov_chains].astype('double')
     if differencing:
         simulations = preprocessing.differencing(simulations)
-    if distance_func == "dtw":
+    if distance_func == 'dtw':
         distance_func = dtw_ndim.distance_matrix_fast
-    elif distance_func == "hausdorff":
+    elif distance_func == 'hausdorff':
         distance_func = compute_Hausdorff_distance
 
-    if method == "HDBSCAN":
+    if method == 'HDBSCAN':
         if num_lineages is not None:
-            logging.warn("num_lineages ignored for method HDBSCAN!")
+            logging.warn('num_lineages ignored for method HDBSCAN!')
 
         distances = distance_func(simulations)
 
         # HDBSCAN
         model = HDBSCAN(
             min_cluster_size=int(num_chains * 0.05),
-            metric="precomputed",
+            metric='precomputed',
             n_jobs=n_jobs,
             allow_single_cluster=True,
         )
         cluster_labels = model.fit_predict(distances)
 
     elif type(num_lineages) is int:
-        if num_lineages > 0 and method == "linkage":
+        if num_lineages > 0 and method == 'linkage':
             # Construct linkage tree
             model = clustering.LinkageTree(
-                dists_fun=distance_func, dists_options={}, method="ward"
+                dists_fun=distance_func, dists_options={}, method='ward'
             )
             cluster_idx = model.fit(simulations)
             cluster_labels = hierarchy.fcluster(
-                model.linkage, num_lineages, criterion="maxclust"
+                model.linkage, num_lineages, criterion='maxclust'
             )
 
-        elif num_lineages > 0 and method == "kmediods":
+        elif num_lineages > 0 and method == 'kmediods':
             model = clustering.KMedoids(distance_func, {}, k=num_lineages)
             cluster_labels = model.fit(simulations)
     else:
-        raise ValueError("Incompatible num_lineages and method specification!")
+        raise ValueError('Incompatible num_lineages and method specification!')
 
     return cluster_labels, model
 
@@ -131,16 +131,16 @@ def cluster_markov_chains(
 # Minimal Cytopath implementation with no cell fate assignment
 def infer_cytopath_lineages(
     data,
-    matrix_key="T_forward",
+    matrix_key='T_forward',
     self_transitions=False,
-    init="root_cells",
+    init='root_cells',
     recalc_items=False,
     recalc_matrix=False,
     num_lineages=None,
-    method="HDBSCAN",
-    distance_func="dtw",
+    method='HDBSCAN',
+    distance_func='dtw',
     differencing=False,
-    basis="pca",
+    basis='pca',
     num_chains=1000,
     max_iter=1000,
     tol=1e-5,
@@ -150,10 +150,10 @@ def infer_cytopath_lineages(
     # Run analysis using copy of anndata if specified otherwise inplace
     adata = data.copy() if copy else data
 
-    logging.warning("If precomputed items are used, parameters will not be enforced!")
+    logging.warning('If precomputed items are used, parameters will not be enforced!')
 
     # Check if state_probability_sampling() has been run
-    if "state_probability_sampling" not in adata.uns.keys() or recalc_items:
+    if 'state_probability_sampling' not in adata.uns.keys() or recalc_items:
         sample_state_probability(
             adata,
             matrix_key=matrix_key,
@@ -165,11 +165,11 @@ def infer_cytopath_lineages(
             copy=False,
         )
     else:
-        logging.info("Using precomputed state probability sampling")
+        logging.info('Using precomputed state probability sampling')
 
     # Check if sample_markov_chains() has been run
-    if "markov_chain_sampling" not in adata.uns.keys() or recalc_items:
-        logging.info("Sampling Markov chains")
+    if 'markov_chain_sampling' not in adata.uns.keys() or recalc_items:
+        logging.info('Sampling Markov chains')
         sample_markov_chains(
             data,
             matrix_key=matrix_key,
@@ -179,8 +179,8 @@ def infer_cytopath_lineages(
             repeat_root=True,
             num_chains=num_chains,
             max_iter=max_iter,
-            convergence=adata.uns["state_probability_sampling"]["sampling_params"][
-                "convergence"
+            convergence=adata.uns['state_probability_sampling']['sampling_params'][
+                'convergence'
             ],
             tol=tol,
             n_jobs=n_jobs,
@@ -188,7 +188,7 @@ def infer_cytopath_lineages(
         )
 
     else:
-        logging.info("Using precomputed Markov chains")
+        logging.info('Using precomputed Markov chains')
 
     cluster_labels, model = cluster_markov_chains(
         adata,
@@ -200,15 +200,15 @@ def infer_cytopath_lineages(
         n_jobs=-1,
     )
 
-    adata.uns["cytopath"] = {}
-    adata.uns["cytopath"]["lineage_inference_clusters"] = cluster_labels
-    adata.uns["cytopath"]["lineage_inference_params"] = {
-        "basis": basis,
-        "num_lineages": num_lineages,
-        "method": method,
+    adata.uns['cytopath'] = {}
+    adata.uns['cytopath']['lineage_inference_clusters'] = cluster_labels
+    adata.uns['cytopath']['lineage_inference_params'] = {
+        'basis': basis,
+        'num_lineages': num_lineages,
+        'method': method,
     }
-    if method == "linkage":
-        adata.uns["cytopath"]["lineage_inference_linkage"] = model.linkage
+    if method == 'linkage':
+        adata.uns['cytopath']['lineage_inference_linkage'] = model.linkage
 
     if copy:
         return adata

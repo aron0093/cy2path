@@ -36,7 +36,7 @@ def normalize(X):
 # WARNING: All standard output will be supressed
 def supress_stdout(func):
     def wrapper(*a, **ka):
-        with open(os.devnull, "w") as devnull:
+        with open(os.devnull, 'w') as devnull:
             with contextlib.redirect_stdout(devnull):
                 return func(*a, **ka)
 
@@ -45,7 +45,7 @@ def supress_stdout(func):
 
 # Check if TPM has been calculated
 def check_TPM(
-    adata, matrix_key="T_forward", recalc_matrix=False, self_transitions=False
+    adata, matrix_key='T_forward', recalc_matrix=False, self_transitions=False
 ):
     # Recalcualte TPM if specified
     if recalc_matrix:
@@ -62,7 +62,7 @@ def check_TPM(
             )
             terminal_states(adata, self_transitions=self_transitions)
             logging.warning(
-                "Transition probability matrix was not present in .obsp and was calculated."
+                'Transition probability matrix was not present in .obsp and was calculated.'
             )
 
         if not issparse(adata.obsp[matrix_key]):
@@ -70,48 +70,48 @@ def check_TPM(
 
     # Recalculate root and terminal states if not present and TPM was not recalculated
     try:
-        assert "root_cells" in adata.obs.columns
-        assert "end_points" in adata.obs.columns
+        assert 'root_cells' in adata.obs.columns
+        assert 'end_points' in adata.obs.columns
     except:
         terminal_states(adata, self_transitions=self_transitions, random_state=None)
-        logging.warning("Root states were not present and were calculated.")
+        logging.warning('Root states were not present and were calculated.')
 
 
 # Check if root states can be initialised
-def check_root_init(adata, init="root_cells"):
+def check_root_init(adata, init='root_cells'):
     # Initialise using root_cells, uniform or custom
     if isinstance(init, str):
-        if init == "root_cells":
+        if init == 'root_cells':
             init_state_probability = (
-                adata.obs["root_cells"] / adata.obs["root_cells"].sum()
+                adata.obs['root_cells'] / adata.obs['root_cells'].sum()
             ).values
             init_type = init
-        elif init == "uniform":
+        elif init == 'uniform':
             init_state_probability = [1 / adata.shape[0]] * adata.shape[
                 0
             ]  # uniform probability to start at each cell
-            init_type = "uniform"
+            init_type = 'uniform'
     elif isinstance(init, (collections.Sequence, np.ndarray)):
         init_state_probability = init
-        init_type = "custom"
+        init_type = 'custom'
     else:
-        raise ValueError("Incorrect initialisation of state probabilities.")
+        raise ValueError('Incorrect initialisation of state probabilities.')
 
     return init_state_probability, init_type
 
 
 # Estimate stationary state of TPM
-def estimate_stationary_state(adata, matrix_key="T_forward"):
+def estimate_stationary_state(adata, matrix_key='T_forward'):
     # Stationary state distribution
     stationary_state_probability = eigs(adata.obsp[matrix_key])[1]
     if stationary_state_probability.shape[1] == 1:
         stationary_state_probability /= stationary_state_probability.sum()
     else:
         stationary_state_probability = (
-            adata.obs["end_points"] / adata.obs["end_points"].sum()
+            adata.obs['end_points'] / adata.obs['end_points'].sum()
         ).values
         logging.warning(
-            "Multiple eigenvalues > 1, falling back to end_points to infer stationary distribution."
+            'Multiple eigenvalues > 1, falling back to end_points to infer stationary distribution.'
         )
     stationary_state_probability = stationary_state_probability.flatten()
 
@@ -147,7 +147,7 @@ def log_domain_mean(tensor_, dim=0, use_gpu=False):
 
 # Generalised Jensen-Shannon divergence
 class JSDLoss(torch.nn.Module):
-    def __init__(self, reduction="sum", use_gpu=False):
+    def __init__(self, reduction='sum', use_gpu=False):
         super().__init__()
         self.kl = torch.nn.KLDivLoss(reduction=reduction, log_target=True)
         self.use_gpu = use_gpu
