@@ -1,12 +1,13 @@
 import logging
 
-logging.basicConfig(level=logging.INFO)
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.spatial.distance import cosine
 from tqdm.auto import tqdm
 
 from .utils import check_root_init, check_TPM, estimate_stationary_state
+
+logging.basicConfig(level=logging.INFO)
 
 
 def check_convergence_criteria(eps_history, tol=1e-5):
