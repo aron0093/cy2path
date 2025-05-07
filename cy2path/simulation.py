@@ -194,13 +194,14 @@ def sample_markov_chains(
             data=np.zeros(
                 (len(stationary_state_probability_by_cluster), max_iter), dtype=np.float
             ),
-            index=stationary_state_by_cluster.index,
+            index=stationary_state_probability_by_cluster.index,
         )
-        for cat in stationary_state_by_cluster.index:
+        for cat in stationary_state_probability_by_cluster.index:
             cluster_proportions.loc[cat, :] = (cluster_sequences == cat).mean(axis=0)
         eps_history = cluster_proportions.apply(
             lambda x: cosine(
-                x.values.flatten(), stationary_state_by_cluster.values.flatten()
+                x.values.flatten(),
+                stationary_state_probability_by_cluster.values.flatten(),
             )
         ).values
         convergence_check = check_convergence_criteria(eps_history, tol)
@@ -246,7 +247,7 @@ def sample_markov_chains(
     }
     if convergence in adata.obs.columns:
         adata.uns['markov_chain_sampling']['stationary_state_by_cluster'] = (
-            stationary_state_by_cluster.values
+            stationary_state_probability_by_cluster.values
         )
         adata.uns['markov_chain_sampling']['cluster_sequences'] = cluster_sequences[
             :, :convergence_check
