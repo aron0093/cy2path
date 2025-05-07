@@ -1,0 +1,54 @@
+[build-system]
+requires = ['setuptools>=64']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'cy2path'
+version = '0.0.3'
+readme = 'README.md'
+description = 'Lineage inference with factorial latent dynamic models trained on Markovian simulations of biological processes using single cell RNA sequencing data.'
+license = { text = 'GPL-3.0 license' }
+requires-python = '>=3.7'
+
+authors = [
+    { name = 'Revant Gupta', email = 'revant.gupta.93@gmail.com'}
+]
+
+keywords = [
+    'Lineage inference',
+    'single-cell RNA sequencing',
+    'state-space models',
+    'markov chain simulation',
+]
+
+classifiers = [
+    'Development Status :: 3 - Alpha',
+    'Intended Audience :: Science/Research',
+    'Topic :: Scientific/Engineering :: Bio-Informatics',
+    'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+]
+
+dependencies = [
+    'scvelo',
+    'scikit-learn>=1.3.0',
+    'imageio==2.19.3',
+    'hausdorff',
+    'dtaidistance',
+    'torch',
+]
+
+[project.urls]
+repository = 'https://github.com/aron0093/cy2path'
+
+# SOURCE: https://stackoverflow.com/a/76739181
+[tool.setuptools.packages.find]
+where = ['.'] # list of folders that contain the packages (['.'] by default)
+include = [
+    'cy2path',
+] # package names should match these glob patterns (['*'] by default)
+exclude = [] # exclude packages matching these glob patterns (empty by default)
+namespaces = false # to disable scanning PEP 420 namespaces (true by default)
